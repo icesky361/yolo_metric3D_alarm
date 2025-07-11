@@ -1,0 +1,45 @@
+# Python相关
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 数据文件
+Data/raw/
+Data/历史/
+*.xlsx
+*.csv
+
+# 模型文件
+models/
+yolov8n-seg.pt
+
+# 日志和缓存
+logs/
+runs/
+*.log
+
+# IDE配置
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
