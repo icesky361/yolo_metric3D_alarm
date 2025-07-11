@@ -1,64 +1,14 @@
-# ======================================================================================
-# ==                           项目依赖项                                           ==
-# ======================================================================================
-# 该文件列出了项目的核心依赖项。
-# 其结构旨在支持YOLO、Metric3D、SAM等多种组件。
-
-# --------------------------------------------------------------------------------------
-# !! 关于依赖与冲突的重要说明 !!
-#
-# 1. PyTorch & CUDA:
-#    PyTorch的版本至关重要，必须与您的NVIDIA驱动和CUDA工具包版本相匹配。
-#    下面的命令行是一个CUDA 11.8的示例。在安装前，请在终端中运行 `nvcc --version` 来验证您的CUDA版本。
-#    然后，访问 https://pytorch.org/get-started/locally/ 获取正确的安装命令。
-#
-# 2. 潜在冲突 (ultralytics vs. timm):
-#    某些版本的 `ultralytics` (用于YOLO) 可能对 `timm` 库有严格的依赖，
-#    这可能与Metric3D等其他模型所需的版本冲突。
-#    目前的最佳实践是先安装 `ultralytics`，然后再安装其他软件包。
-#    如果遇到冲突，作为最后的手段，您可能需要为训练不同类型的模型创建独立的虚拟环境。
-# --------------------------------------------------------------------------------------
-
-# 强烈建议首先根据您特定的CUDA版本，按照PyTorch官方网站的指引安装PyTorch。
-# 这可以避免许多潜在的依赖冲突问题。
-# 请访问: https://pytorch.org/get-started/locally/
-
-# --- 核心机器学习与数据处理库 ---
-numpy               # 科学计算基础库，用于多维数组和矩阵运算
-pandas              # 强大的数据分析和处理库，尤其擅长处理表格数据（如Excel）
-opencv-python       # 计算机视觉库，用于图像和视频的读取、处理、分析
-matplotlib          # 流行的2D绘图库，用于数据可视化
-seaborn             # 基于matplotlib的高级可视化库，提供更美观的统计图形
-tqdm                # 一个快速、可扩展的进度条工具，用于可视化循环的执行进度
-PyYAML              # 用于读写YAML文件，本项目用作配置文件
-scikit-learn        # 机器学习库，本项目主要用于计算评估指标（如混淆矩阵、精确率、召回率等）
-
-# --- 深度学习核心 ---
-# YOLO模型的主要依赖库
-# 注意: `ultralytics` 库有其自身的特定依赖项，安装时会自动拉取。
-# 如果您的环境中还安装了其他计算机视觉库，请注意可能发生的依赖冲突，
-# 特别是与 `timm` 库的冲突可能较为常见。
+--extra-index-url https://download.pytorch.org/whl/cu102
+numpy==1.19.5
+pandas==1.2.5
+opencv-python==4.5.5.64
+matplotlib==3.3.4
+seaborn==0.11.2
+tqdm>=4.64.0
+PyYAML==5.4.1
+scikit-learn==0.24.2
 ultralytics
-
-# --- Segment Anything Model (SAM) 的依赖 --- 
-# 通常用于半自动标注或作为比较模型。
-# pip install git+https://github.com/facebookresearch/segment-anything.git
-
-# --- Metric3D V2 的依赖 ---
-# 这些是高级深度估计模型通常需要的依赖。
-# timm # 视觉Transformer模型库，通常是一个依赖项
-# einops # 用于灵活的张量操作
-
-# --- 3D数据处理的依赖 (如果后续需要) ---
-# open3d
-
-# --- PyTorch (CPU/GPU) ---
-# ** 请根据您系统的CUDA版本手动安装此项 **
-# 以下是CUDA 11.8的示例。请勿盲目运行此行命令。
-# torch==2.1.0+cu118 torchvision==0.16.0+cu118 torchaudio==2.1.0+cu118 --index-url https://download.pytorch.org/whl/cu118
-
-# --- 用于加速的NVIDIA工具 (可选，但推荐用于A4500等GPU) ---
-# 如果您计划使用这些工具，应在您的环境中安装它们。
-# 安装通常由CUDA工具包处理，但可能需要Python绑定。
-# tensorrt
-# pycuda
+pillow==8.4.0
+scipy==1.7.3
+torch==1.8.0+cu102
+torchvision==0.9.0+cu102  #conda install  pytorch==1.8.0 torchvision==0.9.0 torchaudio==0.8.0 cudatoolkit=10.2  -y
