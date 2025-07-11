@@ -1,4 +1,5 @@
 import torch
+from ultralytics import YOLO
 print(torch.cuda.is_available())  # 应输出True
 print(torch.cuda.get_device_name(0))  # 应显示GeForce MX350
 
@@ -9,7 +10,8 @@ print(f"CUDA版本: {torch.version.cuda}")
 # 测试YOLOv11推理
 from ultralytics import YOLO
 import os
-
+model = YOLO('yolo11n.pt') 
+print('模型加载成功:', model.names[:5])  
 try:
     # 加载轻量级模型以适应2GB显存
     model = YOLO('yolo11n.pt')
