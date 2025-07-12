@@ -12,7 +12,8 @@ from ultralytics import YOLO
 import os
 try:
     # 加载轻量级模型以适应2GB显存
-    model = YOLO(r"D:\program\python\PythonProject\Yolo_seg_Alarm\yolov8n-seg.pt") 
+    model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models', 'yolov8n-seg.pt')
+    model = YOLO(model_path)
     print("YOLOv8模型加载成功")
     print('模型类别:', list(model.names.values())[:5])
     
