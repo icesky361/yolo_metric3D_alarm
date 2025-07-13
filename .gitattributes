@@ -1,0 +1,12 @@
+# 设置所有文本文件使用LF换行符
+* text=auto eol=lf
+
+# 明确指定Python文件使用LF
+*.py text eol=lf
+
+# 二进制文件不转换换行符
+*.ico binary
+*.png binary
+*.exe binary
+*.xlsx binary
+*.xls binary

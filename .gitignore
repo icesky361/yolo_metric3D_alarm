@@ -46,8 +46,8 @@ Yolo_seg_Alarm/gemini/reports/
 # 不忽略requirements.txt
 !requirements.txt
 # 数据目录
-Data/raw/
-Data/历史/
+Data/
+
 # 日志文件
 app.log
 logs/

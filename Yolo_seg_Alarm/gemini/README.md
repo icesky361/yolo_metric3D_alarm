@@ -93,7 +93,7 @@ source venv/bin/activate  # 在Windows上, 使用 `venv\Scripts\activate`
 ```
 
 **第2步：安装PyTorch**
-使用 `nvidia-smi` 命令检查您的NVIDIA GPU的CUDA版本。然后，访问 [PyTorch官网](https://pytorch.org/get-started/locally/) 获取适合您系统的正确安装命令。**这是至关重要的一步。**
+使用 `nvidia-smi` 命令检查您的NVIDIA GPU的CUDA版本。然后，访问 [PyTorch官网](https://pytorch.org/get-started/locally/) 获取适合您系统的正确安装命令。**这是非常重要的一步。**
 
 **第3步：安装依赖**
 ```bash
@@ -124,6 +124,16 @@ pip install -r requirements.txt
 
 ## 7. 如何运行
 
+### 前置准备：获取必要文件
+由于Git仓库不跟踪大型二进制文件，请先准备以下文件：
+
+#### 1. 模型文件
+- 下载YOLOv8分割模型权重：<mcurl name="yolov8n-seg.pt" url="https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8n-seg.pt"></mcurl>
+- 将文件保存到项目根目录：`D:\program\python\PythonProject\Yolo_seg_Alarm\yolov8n-seg.pt`
+
+#### 2. 测试图片
+- 在项目根目录创建`Data`文件夹，并添加测试图片：
+```
 **1. 生成标签文件**
 运行转换脚本。系统将分别为训练集和验证集提示您选择对应的Excel文件。
 ```bash
