@@ -1,12 +1,2409 @@
-# 设置所有文本文件使用LF换行符
+# 设置所有文本文件自动检测并使用LF换行符
+# text=auto: Git会自动检测文件是否为文本类型
+# eol=lf: 无论操作系统如何，文本文件均使用LF换行符
 * text=auto eol=lf
 
-# 明确指定Python文件使用LF
+# Python源代码文件 - 使用LF换行符
+# .py: Python主程序文件
+# .pyw: Python窗口应用程序
+# .pyi: Python类型提示文件
+# .pyx: Cython源代码文件
+# .pxd: Cython声明文件
 *.py text eol=lf
+*.pyw text eol=lf
+*.pyi text eol=lf
+*.pyx text eol=lf
+*.pxd text eol=lf
 
-# 二进制文件不转换换行符
+# 配置文件 - 使用LF换行符
+*.ini text eol=lf       # INI配置文件
+*.toml text eol=lf      # TOML配置文件
+*.yaml text eol=lf      # YAML配置文件
+*.yml text eol=lf       # YAML配置文件(替代扩展名)
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
 *.ico binary
 *.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
 *.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
 *.xlsx binary
 *.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 版本控制配置文件自身
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.json text eol=lf      # JSON配置文件
+*.cfg text eol=lf       # 通用配置文件
+.env text eol=lf        # 环境变量文件
+
+# 文档文件 - 使用LF换行符
+*.md text eol=lf        # Markdown文档
+*.rst text eol=lf       # reStructuredText文档
+*.txt text eol=lf       # 纯文本文档
+
+# 数据文件 - 使用LF换行符
+*.csv text eol=lf       # 逗号分隔值文件
+*.tsv text eol=lf       # 制表符分隔值文件
+*.log text eol=lf       # 日志文件
+
+# 脚本文件 - 根据平台设置换行符
+*.sh text eol=lf        # Shell脚本(使用LF)
+*.bat text eol=crlf     # Windows批处理文件(保持CRLF)
+
+# 二进制文件 - 不转换换行符(按二进制方式处理)
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+# 数据库文件
+*.sqlite binary
+*.db binary
+# 字体文件
+*
