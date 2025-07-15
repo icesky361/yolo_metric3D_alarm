@@ -1,0 +1,99 @@
+# ==============================================
+# Git属性配置文件
+# 用于统一跨平台文件格式处理
+# ==============================================
+
+# 基础文本文件配置 - 自动检测并使用LF换行符
+* text=auto eol=lf
+
+# ==============================================
+# 编程语言相关文件
+# ==============================================
+# Python文件
+*.py text eol=lf
+*.pyw text eol=lf
+*.pyi text eol=lf
+*.pyx text eol=lf
+*.pxd text eol=lf
+
+# ==============================================
+# 配置文件
+# ==============================================
+*.ini text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.cfg text eol=lf
+.env text eol=lf
+#!.env.example  # 此行需删除或注释掉（Git属性不支持否定模式）
+
+# ==============================================
+# 文档文件
+# ==============================================
+*.md text eol=lf
+*.rst text eol=lf
+*.txt text eol=lf
+
+# ==============================================
+# 数据文件
+# ==============================================
+*.csv text eol=lf
+*.tsv text eol=lf
+*.log text eol=lf
+
+# ==============================================
+# 脚本文件
+# ==============================================
+*.sh text eol=lf
+*.bat text eol=crlf
+
+# ==============================================
+# 二进制文件（不转换换行符）
+# ==============================================
+# 图像文件
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+*.psd binary
+
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+
+# 文档与压缩文件
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+
+# 办公文档
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.doc binary
+
+# 数据库文件
+*.sqlite binary
+*.db binary
+
+# 字体文件
+*.ttf binary
+*.otf binary
+
+# 模型文件
+*.pt binary
+*.pth binary
+*.xdown binary
+
+# ==============================================
+# 版本控制配置文件自身
+# ==============================================
+.gitattributes text eol=lf
+.gitignore text eol=lf
