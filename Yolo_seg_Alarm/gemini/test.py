@@ -25,10 +25,8 @@ model_path = os.path.join('models', model_name) # 添加这行
 
 try:
     # 先尝试从本地models文件夹加载
-    print(f"尝试加载模型路径: {os.path.abspath(model_path)}")
-    if not os.path.exists(model_path):
-        print(f"模型文件不存在于: {os.path.abspath(model_path)}")
     model = YOLO(model_path)
+    print(f"本地模型加载成功: {os.path.abspath(model_path)}")
 except Exception as e:
     print(f"模型{model_path}加载失败，尝试从官方源下载yolov8n-seg.pt: {str(e)}")
     model = YOLO('yolov8n-seg.pt', task='segment')
@@ -42,6 +40,7 @@ try:
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"测试图片不存在: {image_path}")
     image = Image.open(image_path)
+    print(f"测试图片加载成功: {os.path.abspath(image_path)}")
 
     # 执行推理
     results = model(image)
