@@ -20,9 +20,13 @@ print(f"CUDA版本: {torch.version.cuda if torch.cuda.is_available() else 'N/A'}
 # 测试YOLO推理
 from ultralytics import YOLO
 try:
-    # 动态加载模型
+    # 动态加载模型（自动下载）
     model_name = config['weights']
-    model = YOLO(model_name)
+    try:
+        model = YOLO(model_name)
+    except Exception as e:
+        print(f"模型{model_name}加载失败，尝试从官方源下载: {str(e)}")
+        model = YOLO(model_name, task='segment')
     print(f"模型加载成功: {model_name}")
     print('模型类别:', list(model.names.values())[:5])
     
