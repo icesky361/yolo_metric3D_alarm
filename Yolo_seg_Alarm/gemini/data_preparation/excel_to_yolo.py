@@ -300,7 +300,7 @@ def save_progress(progress_file, processed_images, start_time):
     except Exception as e:
         logging.error(f"保存进度失败: {e}")
         raise  # 抛出异常以便上层捕获处理
-def process_single_row(row, class_mapping, image_cache, processed_images, progress_file, progress_lock):
+def process_single_row(row, class_mapping, image_cache, processed_images, progress_file, progress_lock, start_time):
     result = {'success': False, 'missing': None, 'image_name': row['图片名称']}
     image_name = row['图片名称']
 
@@ -427,9 +427,10 @@ def main():
         # --- 关键修改：使用线程池处理行数据 --- 
         with ThreadPoolExecutor() as executor:
             # 准备任务参数
+            # 在main函数的任务创建处添加start_time参数
             tasks = [
-                (row, class_mapping, image_cache, processed_images, progress_file, progress_lock)
-                for _, row in df_filtered.iterrows()
+            (row, class_mapping, image_cache, processed_images, progress_file, progress_lock, start_time)  # 新增start_time参数
+            for _, row in df_filtered.iterrows()
             ]
             # 执行并行处理
             results = list(tqdm(
