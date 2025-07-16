@@ -305,8 +305,10 @@ def save_progress(progress_file, processed_images, start_time, log_message=False
         raise  # 抛出异常以便上层捕获处理
 def process_single_row(row, class_mapping, image_cache, processed_images, progress_file, progress_lock, start_time, error_log_path):
     image_name = str(row['图片名称']).strip()
-    row_index = row.name  # 获取行索引
+    row_index = row.name
     errors = []
+    result = {'success': False}
+    success_write = False
     
     try:
         # 1. 验证基本数据
@@ -374,26 +376,27 @@ def process_single_row(row, class_mapping, image_cache, processed_images, progre
                 with open(label_path, 'a', encoding='utf-8') as f:
                     f.write(f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}\n")
                 success_write = True
-
-            except ValueError:
+                
+            except ValueError as e:
                 logging.error(f"图片 {image_name} 的坐标格式无效: '{coord_str}'，跳过。")
-                success = False
-                break
-            except PermissionError:
-                if attempt < retries - 1:
-                    time.sleep(0.5)
-                else:
-                    logging.error(f"文件 {label_path} 写入失败")
-            finally:
-        # 可选的清理代码
-                pass
-    # --- 步骤5: 保存进度（使用线程锁） --- 
-    if success_write:
-        with progress_lock:
-            processed_images.append(image_name)
-            if len(processed_images) % 10 == 0:
-                save_progress(progress_file, processed_images, start_time)
-        result['success'] = True
+                continue
+            except PermissionError as e:
+                logging.error(f"文件 {label_path} 写入失败: {str(e)}")
+                continue
+            
+        # 保存进度（使用线程锁）
+        if success_write:
+            with progress_lock:
+                processed_images.append(image_name)
+                if len(processed_images) % 10 == 0:
+                    save_progress(progress_file, processed_images, start_time)
+            result['success'] = True
+            
+    except ValueError as e:
+        logging.error(f"处理图片 {image_name} 时发生验证错误: {str(e)}")
+    except Exception as e:
+        logging.error(f"处理图片 {image_name} 时发生未知错误: {str(e)}")
+    
     return result
 def main():
     """
