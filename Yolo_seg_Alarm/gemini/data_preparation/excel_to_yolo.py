@@ -36,11 +36,14 @@ import logging
 import shutil
 import cv2
 from concurrent.futures import ThreadPoolExecutor
-
-# --- 日志配置 --- 
-# 配置日志记录器，同时输出到控制台和文件
+import json  # 确保已导入json模块
+from datetime import datetime
+import threading
+from tkinter import messagebox  #
 import time
 from datetime import datetime
+
+progress_lock = threading.Lock()
 log_dir = Path(__file__).parent.parent / 'logs'
 log_dir.mkdir(exist_ok=True)
 log_file = log_dir / f"excel_to_yolo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
@@ -90,7 +93,8 @@ def build_image_cache(base_dir):
             cache[path.name] = path
     return cache
 # 修改函数参数，将image_base_dir改为image_cache
-def convert_to_yolo_format(df, class_mapping, image_cache, label_output_dir):
+# 修改函数定义，添加processed_images和progress_file参数
+def convert_to_yolo_format(df, class_mapping, image_cache, label_output_dir, processed_images, progress_file):
     success_count = 0
     missing_images = []
     error_count = 0
@@ -102,7 +106,12 @@ def convert_to_yolo_format(df, class_mapping, image_cache, label_output_dir):
         class_mapping (dict): 类别名到类别ID的映射字典。
         image_cache (dict): 图片名称到路径的缓存字典
         label_output_dir (Path): 存放标签文件的根目录
+        processed_images (list): 已处理图片名称列表
+        progress_file (Path): 进度文件路径
     """
+    # 筛选未处理的行
+    df_filtered = df[~df['图片名称'].isin(processed_images)]
+    total = len(df_filtered)
     logging.info(f"正在处理 {len(df)} 条标注数据...")
     for index, row in tqdm(df.iterrows(), total=df.shape[0], desc="转换标注为YOLO格式"):
         image_name = row['图片名称']
@@ -210,6 +219,152 @@ def convert_to_yolo_format(df, class_mapping, image_cache, label_output_dir):
     total_time = end_time - start_time
     return success_count, missing_images, error_count, total_time
 
+# ===== 提前定义进度跟踪函数 =====
+# ===== 进度跟踪函数 =====
+def get_progress_file_path(data_split: str) -> Path:
+    """
+    生成固定命名的进度文件路径（确保断点续跑时能加载旧进度）
+    
+    参数:
+        data_split (str): 数据集类型（如'train'/'val'）
+    
+    返回:
+        Path: 进度文件的Path对象
+    """
+    from pathlib import Path  # 局部导入避免污染全局命名空间
+    progress_dir = Path(__file__).parent / "progress"  # 基于当前文件路径构造进度目录
+    progress_dir.mkdir(exist_ok=True)  # 自动创建目录（存在则忽略）
+    return progress_dir / f"{data_split}_progress.json"  # 固定文件名（无时间戳）
+
+# ===== 进度跟踪函数结束 =====
+
+def load_progress(progress_file: Path):
+    """
+    加载已保存的进度文件，兼容旧格式（列表/字典）
+    参数:
+        progress_file (Path): 进度文件路径
+    返回:
+        list: 已处理图片名称列表（空列表表示无进度或加载失败）
+    """
+    # 1. 检查文件是否存在
+    if not progress_file.exists():
+        logging.info(f"进度文件不存在: {progress_file}")
+        return []
+
+    # 2. 尝试读取并解析JSON
+    try:
+        with open(progress_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        logging.warning(f"进度文件 {progress_file} 格式错误（JSON解析失败）: {e}，将从头开始处理")
+        return []
+    except Exception as e:
+        logging.error(f"加载进度文件 {progress_file} 失败: {e}")
+        return []
+
+    # 3. 兼容旧格式（列表或字典）
+    if isinstance(data, list):
+        # 旧格式：直接返回列表（已处理图片）
+        return data
+    elif isinstance(data, dict):
+        # 新格式：提取 'processed_images' 字段（可能为列表或集合）
+        processed = data.get('processed_images', [])
+        # 确保返回列表（兼容集合类型）
+        return list(processed) if isinstance(processed, (list, set)) else []
+    else:
+        # 未知格式：返回空列表
+        logging.warning(f"进度文件 {progress_file} 格式未知，将从头开始处理")
+        return []
+
+def save_progress(progress_file, processed_images, start_time):
+    """
+    保存当前处理进度到JSON文件
+    参数:
+        progress_file (Path): 进度文件路径
+        processed_images (list): 已处理图片名称列表
+        start_time (float): 任务开始时间戳
+    """
+    try:
+        progress_data = {
+            'processed_images': processed_images,  # 已处理图片列表（列表类型）
+            'start_time': start_time,  # 任务开始时间戳（兼容续跑计时）
+            'last_updated': datetime.now().timestamp()  # 最后更新时间戳（新增，用于判断进度时效性）
+        }
+        # 兼容旧格式：如果processed_images是集合，转换为列表
+        if isinstance(processed_images, set):
+            progress_data['processed_images'] = list(processed_images)
+        # 写入文件（使用indent保持可读性，ensure_ascii=False支持中文路径）
+        with open(progress_file, 'w', encoding='utf-8') as f:
+            json.dump(progress_data, f, ensure_ascii=False, indent=2)
+        logging.info(f"进度已保存至: {progress_file}")
+    except Exception as e:
+        logging.error(f"保存进度失败: {e}")
+        raise  # 抛出异常以便上层捕获处理
+def process_single_row(row, class_mapping, image_cache, processed_images, progress_file, progress_lock):
+    result = {'success': False, 'missing': None, 'image_name': row['图片名称']}
+    image_name = row['图片名称']
+
+    # --- 步骤1: 查找图片路径 --- 
+    image_path = image_cache.get(image_name)
+    if not image_path:
+        result['missing'] = image_name
+        return result
+
+    # --- 步骤2: 读取图片尺寸 --- 
+    try:
+        img = cv2.imread(str(image_path))
+        if img is None:
+            return result
+        img_h, img_w, _ = img.shape
+    except Exception as e:
+        logging.error(f"读取图片 {image_path} 失败: {e}")
+        return result
+
+    # --- 步骤3: 处理坐标和类别 --- 
+    class_names = [cn.strip() for cn in row['告警事由'].split(',')]
+    coords_list = [coord.strip() for coord in str(row['坐标']).split(';')]
+    if len(class_names) != len(coords_list):
+        logging.error(f"{image_name} 类别与坐标数量不匹配")
+        return result
+
+    # --- 步骤4: 写入标签文件 --- 
+    label_path = image_path.with_suffix('.txt')
+    retries = 5
+    success_write = False
+    for attempt in range(retries):
+        try:
+            with open(label_path, 'w', encoding='utf-8') as f:
+                for class_name, coord_str in zip(class_names, coords_list):
+                    # 解析并归一化坐标（逻辑同原函数）
+                    coord_str_clean = coord_str.strip('[]')
+                    coords = [float(p) for p in coord_str_clean.split(',')]
+                    if len(coords) != 4:
+                        continue
+                    x1, y1, w, h = coords
+                    x_center = (x1 + w/2) / img_w
+                    y_center = (y1 + h/2) / img_h
+                    width = w / img_w
+                    height = h / img_h
+                    class_id = class_mapping.get(class_name, -1)
+                    if class_id == -1:
+                        continue
+                    f.write(f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}\n")
+            success_write = True
+            break
+        except PermissionError:
+            if attempt < retries - 1:
+                time.sleep(0.5)
+            else:
+                logging.error(f"文件 {label_path} 写入失败")
+
+    # --- 步骤5: 保存进度（使用线程锁） --- 
+    if success_write:
+        with progress_lock:
+            processed_images.append(image_name)
+            if len(processed_images) % 10 == 0:
+                save_progress(progress_file, processed_images, start_time)
+        result['success'] = True
+    return result
 def main():
     """
     主函数，用于编排整个数据转换流程。
@@ -242,29 +397,67 @@ def main():
         df_labels = pd.read_excel(excel_path)
         stats[data_split]['count'] = len(df_labels)
 
-        # --- 步骤2: 定义图片根目录 --- 
+        # --- 步骤2: 定义图片根目录 ---
         image_base_dir = DATA_ROOT / data_split / 'images'
         if not image_base_dir.exists():
             logging.error(f"图片根目录不存在，跳过: {image_base_dir}")
             continue
 
         # --- 新增: 构建图片缓存 --- 
-        logging.info(f"正在构建{data_split}数据集图片路径缓存...")
         image_cache = build_image_cache(image_base_dir)
-        logging.info(f"共缓存 {len(image_cache)} 张图片路径")
+        logging.info(f"已构建图片缓存，包含 {len(image_cache)} 张图片")
 
-        # --- 步骤3: 直接覆盖现有标签文件 --- 
-        logging.info(f"将直接覆盖 '{data_split}' 数据集中已存在的.txt标签文件...")
+        # --- 步骤3: 断点续跑逻辑 ---
+        progress_file = get_progress_file_path(data_split)
+        processed_images = load_progress(progress_file)
+        start_time = time.time()  # 记录当前数据集开始时间
 
-        # --- 步骤4: 转换标注文件 --- 
-        # 修改: 传入image_cache代替image_base_dir
-        success, missing, errors, process_time = convert_to_yolo_format(
-            df_labels, class_mapping, image_cache, image_base_dir
-        )
-        stats[data_split]['success'] = success
-        stats[data_split]['missing'] = missing
-        stats[data_split]['error'] = errors
-        stats[data_split]['time'] = process_time
+        # --- 步骤4: 筛选未处理数据 ---
+        df_filtered = df_labels[~df_labels['图片名称'].isin(processed_images)]
+        total_to_process = len(df_filtered)
+        if total_to_process == 0:
+            logging.info(f"所有 {data_split} 数据均已处理完成")
+            progress_file.unlink(missing_ok=True)
+            continue
+        logging.info(f"发现 {total_to_process} 个未处理项目，开始处理...")
+
+        # --- 关键修改：初始化成功计数器 --- 
+        success_count = 0
+
+        # --- 关键修改：使用线程池处理行数据 --- 
+        with ThreadPoolExecutor() as executor:
+            # 准备任务参数
+            tasks = [
+                (row, class_mapping, image_cache, processed_images, progress_file, progress_lock)
+                for _, row in df_filtered.iterrows()
+            ]
+            # 执行并行处理
+            results = list(tqdm(
+                executor.map(lambda p: process_single_row(*p), tasks),
+                total=total_to_process,
+                desc=f"处理 {data_split} 数据集"
+            ))
+
+        # --- 关键修改：统计结果 --- 
+        for result in results:
+            if result['success']:
+                success_count += 1
+                processed_images.append(result['image_name'])
+            elif result['missing']:
+                stats[data_split]['missing'].append(result['missing'])
+
+        # --- 关键修改：更新统计信息 --- 
+        stats[data_split]['success'] = success_count
+        stats[data_split]['error'] = total_to_process - success_count
+        stats[data_split]['time'] = time.time() - start_time
+
+        # --- 关键修改：进度处理 --- 
+        if success_count == total_to_process:
+            progress_file.unlink(missing_ok=True)
+            logging.info(f"{data_split} 数据集全部处理完成，已删除进度文件")
+        else:
+            save_progress(progress_file, processed_images, start_time)
+            logging.info(f"{data_split} 数据集部分处理完成，进度已保存")
 
     # 计算总统计
     total_time = time.time() - total_start_time
@@ -319,10 +512,7 @@ def main():
 if __name__ == '__main__':
     main()
 
-def process_row(row, class_mapping, image_cache):
-    # 提取单条数据处理逻辑
-    ...
-
 # 使用线程池并行处理
 with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
     results = list(tqdm(executor.map(process_row, df.itertuples()), total=len(df)))
+
