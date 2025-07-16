@@ -276,7 +276,7 @@ def load_progress(progress_file: Path):
         logging.warning(f"进度文件 {progress_file} 格式未知，将从头开始处理")
         return []
 
-def save_progress(progress_file, processed_images, start_time):
+def save_progress(progress_file, processed_images, start_time, log_message=False):
     """
     保存当前处理进度到JSON文件
     参数:
@@ -296,7 +296,10 @@ def save_progress(progress_file, processed_images, start_time):
         # 写入文件（使用indent保持可读性，ensure_ascii=False支持中文路径）
         with open(progress_file, 'w', encoding='utf-8') as f:
             json.dump(progress_data, f, ensure_ascii=False, indent=2)
-        logging.info(f"进度已保存至: {progress_file}")
+        
+        # 仅在需要时打印日志
+        if log_message:
+            logging.info(f"进度已保存至: {progress_file}")
     except Exception as e:
         logging.error(f"保存进度失败: {e}")
         raise  # 抛出异常以便上层捕获处理
@@ -425,7 +428,7 @@ def main():
         success_count = 0
 
         # --- 关键修改：使用线程池处理行数据 --- 
-        with ThreadPoolExecutor() as executor:
+        with ThreadPoolExecutor(max_workers=args.threads) as executor:
             # 准备任务参数
             # 在main函数的任务创建处添加start_time参数
             tasks = [
@@ -435,8 +438,8 @@ def main():
             # 执行并行处理
             results = list(tqdm(
                 executor.map(lambda p: process_single_row(*p), tasks),
-                total=total_to_process,
-                desc=f"处理 {data_split} 数据集"
+                total=len(tasks),
+                desc=f"处理 {dataset} 数据集"
             ))
 
         # --- 关键修改：统计结果 --- 
@@ -458,7 +461,7 @@ def main():
             logging.info(f"{data_split} 数据集全部处理完成，已删除进度文件")
         else:
             save_progress(progress_file, processed_images, start_time)
-            logging.info(f"{data_split} 数据集部分处理完成，进度已保存")
+            logging.info(f"{data_split} 数据集部分处理完成，共处理 {len(processed_images)} 张图片,进度已保存")
 
     # 计算总统计
     total_time = time.time() - total_start_time
