@@ -42,6 +42,7 @@ import threading
 from tkinter import messagebox  #
 import time
 from datetime import datetime
+import argparse
 
 progress_lock = threading.Lock()
 log_dir = Path(__file__).parent.parent / 'logs'
@@ -399,6 +400,26 @@ def process_single_row(row, class_mapping, image_cache, processed_images, progre
     
     return result
 def main():
+    # 添加参数解析器
+    parser = argparse.ArgumentParser(description='Excel转换为YOLO格式标注工具')
+    parser.add_argument('--threads', type=int, default=4, help='线程数量（默认：4）')
+    args = parser.parse_args()
+    
+    # 配置日志
+    log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'logs')
+    os.makedirs(log_dir, exist_ok=True)
+    log_filename = f"excel_to_yolo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    log_path = os.path.join(log_dir, log_filename)
+    
+    # 定义错误日志路径
+    error_log_path = log_path  # 可以根据需要更改为不同的文件路径
+    
+    logging.basicConfig(
+        filename=log_path,
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
+    
     """
     主函数，用于编排整个数据转换流程。
     新逻辑: 直接在原始图片目录下生成标签文件，不再复制图片。
