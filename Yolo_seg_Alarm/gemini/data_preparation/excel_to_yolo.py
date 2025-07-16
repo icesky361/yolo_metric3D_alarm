@@ -303,63 +303,90 @@ def save_progress(progress_file, processed_images, start_time, log_message=False
     except Exception as e:
         logging.error(f"保存进度失败: {e}")
         raise  # 抛出异常以便上层捕获处理
-def process_single_row(row, class_mapping, image_cache, processed_images, progress_file, progress_lock, start_time):
-    result = {'success': False, 'missing': None, 'image_name': row['图片名称']}
-    image_name = row['图片名称']
-
-    # --- 步骤1: 查找图片路径 --- 
-    image_path = image_cache.get(image_name)
-    if not image_path:
-        result['missing'] = image_name
-        return result
-
-    # --- 步骤2: 读取图片尺寸 --- 
+def process_single_row(row, class_mapping, image_cache, processed_images, progress_file, progress_lock, start_time, error_log_path):
+    image_name = str(row['图片名称']).strip()
+    row_index = row.name  # 获取行索引
+    errors = []
+    
     try:
-        img = cv2.imread(str(image_path))
-        if img is None:
-            return result
-        img_h, img_w, _ = img.shape
-    except Exception as e:
-        logging.error(f"读取图片 {image_path} 失败: {e}")
-        return result
+        # 1. 验证基本数据
+        if not image_name:
+            errors.append("图片名称为空")
+            raise ValueError("图片名称为空")
+        
+        # 2. 获取类别和坐标数据
+        classes_str = str(row['类别']).strip()
+        coords_str = str(row['坐标']).strip()
+        
+        # 3. 验证类别和坐标不为空
+        if not classes_str:
+            errors.append("类别数据为空")
+        if not coords_str:
+            errors.append("坐标数据为空")
+        if errors:
+            raise ValueError(", ".join(errors))
+        
+        # 4. 分割类别和坐标
+        classes = [cls.strip() for cls in classes_str.split(',') if cls.strip()]
+        coords_list = [coord.strip() for coord in coords_str.split(';') if coord.strip()]
+        
+        # 5. 验证类别和坐标数量匹配
+        if len(classes) != len(coords_list):
+            raise ValueError(f"类别与坐标数量不匹配: 类别{len(classes)}个, 坐标{len(coords_list)}个")
+        
+        # 6. 处理每个目标的坐标
+        yolo_annotations = []
+        for cls, coord_str in zip(classes, coords_list):
+            try:
+                # 清理坐标字符串
+                coord_str_clean = coord_str.replace(' ', '').replace(',,', ',').strip(',')
+                coord_parts = [p for p in coord_str_clean.split(',') if p.strip()]
 
-    # --- 步骤3: 处理坐标和类别 --- 
-    class_names = [cn.strip() for cn in row['告警事由'].split(',')]
-    coords_list = [coord.strip() for coord in str(row['坐标']).split(';')]
-    if len(class_names) != len(coords_list):
-        logging.error(f"{image_name} 类别与坐标数量不匹配")
-        return result
+                # 验证坐标格式是否为4的倍数
+                if len(coord_parts) != 4:
+                    error_writer.writerow([image_name, row_index, '坐标数量错误', f'类别数量: {len(classes)}, 坐标数量: {len(coords_list)}, 原始坐标: {coord_str}'])
+                    return False
 
-    # --- 步骤4: 写入标签文件 --- 
-    label_path = image_path.with_suffix('.txt')
-    retries = 5
-    success_write = False
-    for attempt in range(retries):
-        try:
-            with open(label_path, 'w', encoding='utf-8') as f:
-                for class_name, coord_str in zip(class_names, coords_list):
-                    # 解析并归一化坐标（逻辑同原函数）
-                    coord_str_clean = coord_str.strip('[]')
-                    coords = [float(p) for p in coord_str_clean.split(',')]
-                    if len(coords) != 4:
-                        continue
-                    x1, y1, w, h = coords
-                    x_center = (x1 + w/2) / img_w
-                    y_center = (y1 + h/2) / img_h
-                    width = w / img_w
-                    height = h / img_h
-                    class_id = class_mapping.get(class_name, -1)
-                    if class_id == -1:
-                        continue
+                # 转换坐标为浮点数
+                try:
+                    coords = [float(p) for p in coord_parts]
+                except ValueError as e:
+                    raise ValueError(f"坐标转换失败: {str(e)}") from e
+
+                # 验证坐标值为非负数
+                if any(coord < 0 for coord in coords):
+                    error_writer.writerow([image_name, row_index, '坐标值为负数', f'原始坐标: {coord_str}'])
+                    return False
+
+                # 坐标归一化计算
+                x1, y1, w, h = coords
+                x_center = (x1 + w/2) / img_w
+                y_center = (y1 + h/2) / img_h
+                width = w / img_w
+                height = h / img_h
+                normalized_coords = [x_center, y_center, width, height]
+
+                # 如果所有验证通过，处理标注文件
+                class_id = class_mapping.get(cls, -1)
+                if class_id == -1:
+                    continue
+
+                with open(label_path, 'a', encoding='utf-8') as f:
                     f.write(f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}\n")
-            success_write = True
-            break
-        except PermissionError:
-            if attempt < retries - 1:
-                time.sleep(0.5)
-            else:
-                logging.error(f"文件 {label_path} 写入失败")
+                success_write = True
 
+            except ValueError:
+                logging.error(f"图片 {image_name} 的坐标格式无效: '{coord_str}'，跳过。")
+                success = False
+                break
+            except PermissionError:
+                if attempt < retries - 1:
+                    time.sleep(0.5)
+                else:
+                    logging.error(f"文件 {label_path} 写入失败")
+            finally:
+        # 可选的清理代码
+                pass
     # --- 步骤5: 保存进度（使用线程锁） --- 
     if success_write:
         with progress_lock:
@@ -431,10 +458,8 @@ def main():
         with ThreadPoolExecutor(max_workers=args.threads) as executor:
             # 准备任务参数
             # 在main函数的任务创建处添加start_time参数
-            tasks = [
-            (row, class_mapping, image_cache, processed_images, progress_file, progress_lock, start_time)  # 新增start_time参数
-            for _, row in df_filtered.iterrows()
-            ]
+            tasks = [(row, class_mapping, image_cache, processed_images, progress_file, progress_lock, start_time, error_log_path) 
+            for _, row in df_filtered.iterrows()]
             # 执行并行处理
             results = list(tqdm(
                 executor.map(lambda p: process_single_row(*p), tasks),
@@ -519,4 +544,9 @@ if __name__ == '__main__':
 # 使用线程池并行处理
 with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
     results = list(tqdm(executor.map(process_row, df.itertuples()), total=len(df)))
+    # 初始化错误记录文件
+    error_log_path = os.path.join(output_dir, 'error_records.csv')
+    with open(error_log_path, 'w', encoding='utf-8', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['图片名称', '行索引', '错误类型', '原始类别', '原始坐标', '错误详情'])
 
