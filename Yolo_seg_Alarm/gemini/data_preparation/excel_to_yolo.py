@@ -35,6 +35,7 @@ from tqdm import tqdm
 import logging
 import shutil
 import cv2
+from concurrent.futures import ThreadPoolExecutor
 
 # --- 日志配置 --- 
 # 配置日志记录器，同时输出到控制台和文件
@@ -82,28 +83,14 @@ def get_class_mapping(config_path):
     # 创建一个从名称到索引的反向映射
     return {name: index for index, name in config['names'].items()}
 
-def find_image_path(base_dir, image_name):
-    """
-    在基础目录及其所有子目录中递归查找图片文件。
-    参数:
-        base_dir (Path): 要开始搜索的基础目录。
-        image_name (str): 要查找的图片文件名。
-    返回:
-        Path: 如果找到图片，则返回其完整路径；否则返回None。
-    """
-    for path_object in base_dir.rglob(image_name):
-        if path_object.is_file():
-            return path_object
-    return None
-
-def convert_to_yolo_format(df, class_mapping, image_base_dir, label_output_dir):
-    """
-    添加返回值:
-    tuple: (success_count, missing_images, error_count)
-        success_count: 成功生成标签的图片数量
-        missing_images: 未找到的图片名称列表
-        error_count: 处理出错的图片数量
-    """
+def build_image_cache(base_dir):
+    cache = {}
+    for ext in ['.jpg', '.jpeg', '.png', '.bmp']:
+        for path in base_dir.rglob(f'*{ext}'):
+            cache[path.name] = path
+    return cache
+# 修改函数参数，将image_base_dir改为image_cache
+def convert_to_yolo_format(df, class_mapping, image_cache, label_output_dir):
     success_count = 0
     missing_images = []
     error_count = 0
@@ -113,8 +100,8 @@ def convert_to_yolo_format(df, class_mapping, image_base_dir, label_output_dir):
     参数:
         df (pd.DataFrame): 包含标注信息的DataFrame。
         class_mapping (dict): 类别名到类别ID的映射字典。
-        image_base_dir (Path): 存放原始图片的根目录（将在此目录下查找图片）。
-        label_output_dir (Path): 存放标签文件的根目录（与image_base_dir相同）。
+        image_cache (dict): 图片名称到路径的缓存字典
+        label_output_dir (Path): 存放标签文件的根目录
     """
     logging.info(f"正在处理 {len(df)} 条标注数据...")
     for index, row in tqdm(df.iterrows(), total=df.shape[0], desc="转换标注为YOLO格式"):
@@ -124,10 +111,10 @@ def convert_to_yolo_format(df, class_mapping, image_base_dir, label_output_dir):
         # 处理多个坐标（分号分隔）
         coords_list = [coord.strip() for coord in str(row['坐标']).split(';')]
 
-        # --- 步骤1: 在所有子目录中查找图片 --- 
-        image_path = find_image_path(image_base_dir, image_name)
+        # --- 步骤1: 使用缓存查找图片 ---
+        image_path = image_cache.get(image_name)
         if not image_path:
-            logging.warning(f"在 {image_base_dir} 及其子目录中未找到图片，跳过: {image_name}")
+            logging.warning(f"在缓存中未找到图片，跳过: {image_name}")
             missing_images.append(image_name)
             continue
 
@@ -261,13 +248,18 @@ def main():
             logging.error(f"图片根目录不存在，跳过: {image_base_dir}")
             continue
 
+        # --- 新增: 构建图片缓存 --- 
+        logging.info(f"正在构建{data_split}数据集图片路径缓存...")
+        image_cache = build_image_cache(image_base_dir)
+        logging.info(f"共缓存 {len(image_cache)} 张图片路径")
+
         # --- 步骤3: 直接覆盖现有标签文件 --- 
         logging.info(f"将直接覆盖 '{data_split}' 数据集中已存在的.txt标签文件...")
 
-        # --- 步骤4: 转换标注文件 ---
-        # 注意：我们将图片的基础目录直接作为标签输出目录传递
+        # --- 步骤4: 转换标注文件 --- 
+        # 修改: 传入image_cache代替image_base_dir
         success, missing, errors, process_time = convert_to_yolo_format(
-            df_labels, class_mapping, image_base_dir, image_base_dir
+            df_labels, class_mapping, image_cache, image_base_dir
         )
         stats[data_split]['success'] = success
         stats[data_split]['missing'] = missing
@@ -290,11 +282,20 @@ def main():
     # 输出统计日志
     logging.info("\n===== 数据处理统计报告 ======")
     logging.info(f"总处理时间: {total_time:.2f}秒")
-    logging.info(f"总处理数据量: {total_processed}条")
+    logging.info(f"总处理图片数量: {total_processed}张")
     logging.info(f"成功生成标签文件: {total_success}个")
     logging.info(f"未找到图片: {total_missing}张")
     logging.info(f"处理出错: {total_error}条")
-    logging.info(f"每百条数据平均处理时长: {avg_per_hundred:.2f}秒")
+    logging.info(f"每百张图片平均处理时长: {avg_per_hundred:.2f}秒")
+    
+    # 新增: 输出各数据集详细统计
+    for split in ['train', 'val']:
+        if stats[split]['count'] > 0:
+            logging.info(f"\n{split}数据集统计:")
+            logging.info(f"  处理图片数量: {stats[split]['count']}张")
+            logging.info(f"  成功生成标签: {stats[split]['success']}个")
+            logging.info(f"  处理时间: {stats[split]['time']:.2f}秒")
+            logging.info(f"  处理速度: {stats[split]['count']/stats[split]['time']:.2f}张/秒")
 
     # 导出未找到图片列表到Excel
     report_data = []
@@ -317,3 +318,11 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+def process_row(row, class_mapping, image_cache):
+    # 提取单条数据处理逻辑
+    ...
+
+# 使用线程池并行处理
+with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+    results = list(tqdm(executor.map(process_row, df.itertuples()), total=len(df)))
