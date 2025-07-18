@@ -126,6 +126,98 @@ def save_progress(progress_file, processed_images, start_time):
         logging.error(f"进度文件 {progress_file} 写入失败: {e}")
 # 修改函数定义，添加processed_images和progress_file参数
 
+def process_single_row(row, class_mapping, image_cache, error_log_path):
+    """处理单行数据，返回处理结果字典
+    Args:
+        row: DataFrame的一行数据
+        class_mapping: 类别映射字典
+        image_cache: 图片缓存字典
+        error_log_path: 错误日志文件路径
+    Returns:
+        dict: 包含处理结果的字典
+    """
+    result = {
+        'success': False,
+        'image_name': row['图片名称'],
+        'missing': None,
+        'error': None,
+        'time': 0
+    }
+    
+    process_start_time = time.time()
+    image_name = row['图片名称']
+    
+    try:
+        # 1. 查找图片
+        image_path = image_cache.get(image_name)
+        if not image_path:
+            result['missing'] = image_name
+            return result
+            
+        # 2. 读取图片尺寸
+        img = cv2.imread(str(image_path))
+        if img is None:
+            result['error'] = f'无法读取图片: {image_path}'
+            return result
+        img_h, img_w, _ = img.shape
+        
+        # 3. 处理类别和坐标
+        class_names = [cn.strip() for cn in row['告警事由'].split(',')]
+        coords_list = [coord.strip() for coord in str(row['坐标']).split(';') if coord.strip()]
+        
+        if not class_names or len(coords_list) == 0:
+            result['error'] = '缺少类别或坐标信息'
+            return result
+            
+        # 4. 创建标签文件
+        label_path = image_path.with_suffix('.txt')
+        with open(label_path, 'w', encoding='utf-8') as f:
+            for class_name, coord_str in zip(class_names, coords_list):
+                # 验证坐标格式
+                if not (coord_str.startswith('[') and coord_str.endswith(']')):
+                    result['error'] = f'坐标格式错误: {coord_str}'
+                    return result
+                    
+                # 处理坐标
+                coord_str_clean = coord_str.strip('[]').strip()
+                try:
+                    coords = [float(p.strip()) for p in coord_str_clean.split(',')]
+                    if len(coords) != 4 or any(coord < 0 for coord in coords):
+                        result['error'] = f'坐标值无效: {coords}'
+                        return result
+                        
+                    # 计算归一化坐标
+                    x1, y1, w, h = coords
+                    x_center = (x1 + w/2) / img_w
+                    y_center = (y1 + h/2) / img_h
+                    width = w / img_w
+                    height = h / img_h
+                    
+                    # 写入标签
+                    class_id = class_mapping.get(class_name)
+                    if class_id is not None:
+                        f.write(f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}\n")
+                    
+                except ValueError as e:
+                    result['error'] = f'坐标解析错误: {str(e)}'
+                    return result
+                    
+        result['success'] = True
+        
+    except Exception as e:
+        result['error'] = f'处理异常: {str(e)}'
+        
+    finally:
+        result['time'] = time.time() - process_start_time
+        if not result['success'] and error_log_path:
+            with open(error_log_path, 'a', encoding='utf-8', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow([image_name, row.name, '处理失败', 
+                               row.get('告警事由', ''), row.get('坐标', ''),
+                               result.get('error', '未知错误')])
+    
+    return result
+
 def convert_to_yolo_format(df, class_mapping, image_cache, label_output_dir, processed_images, progress_file):
     success_count = 0
     missing_images = []
