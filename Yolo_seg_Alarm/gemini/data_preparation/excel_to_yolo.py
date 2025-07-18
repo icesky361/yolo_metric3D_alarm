@@ -124,8 +124,8 @@ def save_progress(progress_file, processed_images, start_time):
         logging.info(f"已保存 {len(processed_images)} 个处理项，耗时 {elapsed:.2f} 秒")
     except IOError as e:
         logging.error(f"进度文件 {progress_file} 写入失败: {e}")
-
 # 修改函数定义，添加processed_images和progress_file参数
+
 def convert_to_yolo_format(df, class_mapping, image_cache, label_output_dir, processed_images, progress_file):
     success_count = 0
     missing_images = []
@@ -309,6 +309,7 @@ def convert_to_yolo_format(df, class_mapping, image_cache, label_output_dir, pro
                 'missing': image_name if not image_path else None,
                 'error': error_occurred
             }
+            
 def main():
     # 添加参数解析器
     parser = argparse.ArgumentParser(description='Excel转换为YOLO格式标注工具')
