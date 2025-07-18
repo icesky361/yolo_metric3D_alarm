@@ -44,6 +44,7 @@ import time
 from datetime import datetime
 import argparse
 from functools import partial
+import csv
 
 progress_lock = threading.Lock()
 log_dir = Path(__file__).parent.parent / 'logs'
@@ -346,9 +347,8 @@ def process_single_row(row, class_mapping, image_cache, processed_images, progre
     image_name = str(row['图片名称']).strip()
     row_index = row.name
     errors = []
-    result = {'success': False}
-    success_write = False
-    
+    result = {'success': False,'image_name': image_name,'missing': False,'error': None,'time': 0}
+    process_start_time = time.time()
     try:
         # 1. 验证基本数据
         if not image_name:
@@ -377,6 +377,12 @@ def process_single_row(row, class_mapping, image_cache, processed_images, progre
         
         # 6. 处理每个目标的坐标
         yolo_annotations = []
+         # 添加图片路径获取逻辑
+        image_path = image_cache.get(image_name)
+        result['missing'] = not image_path  # 更新missing状态
+        if not image_path:
+        result['error'] = f"图片不存在于缓存中"
+        return result
         for cls, coord_str in zip(classes, coords_list):
             try:
                 # 清理坐标字符串
@@ -414,7 +420,7 @@ def process_single_row(row, class_mapping, image_cache, processed_images, progre
 
                 with open(label_path, 'a', encoding='utf-8') as f:
                     f.write(f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}\n")
-                success_write = True
+                result['success'] = True
                 
             except ValueError as e:
                 logging.error(f"图片 {image_name} 的坐标格式无效: '{coord_str}'，跳过。")
@@ -424,7 +430,7 @@ def process_single_row(row, class_mapping, image_cache, processed_images, progre
                 continue
             
         # 保存进度（使用线程锁）
-        if success_write:
+        if result['success'] :
             with progress_lock:
                 processed_images.append(image_name)
                 if len(processed_images) % 10 == 0:
@@ -435,7 +441,10 @@ def process_single_row(row, class_mapping, image_cache, processed_images, progre
         logging.error(f"处理图片 {image_name} 时发生验证错误: {str(e)}")
     except Exception as e:
         logging.error(f"处理图片 {image_name} 时发生未知错误: {str(e)}")
-    
+        result['error'] = str(e)  # 记录错误信息
+    # 计算处理时间
+    result['time'] = time.time() - process_start_time
+    return result  # 返回统一的result字典
     return {
         'success': success,
         'image_name': image_name,
@@ -627,6 +636,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
-       
