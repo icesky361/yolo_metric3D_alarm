@@ -100,11 +100,31 @@ def build_image_cache(base_dir):
 def get_progress_file_path(data_split):
     # 获取当前脚本所在目录（data_preparation）
     current_dir = Path(__file__).parent
-    # 创建progress子目录
     progress_dir = current_dir / 'progress'
     progress_dir.mkdir(exist_ok=True)
-    # 返回进度文件路径
     return progress_dir / f'{data_split}_progress.json'
+#  添加进度加载函数
+def load_progress(progress_file):
+    """加载已处理的图片名称列表"""
+    if progress_file.exists():
+        try:
+            with open(progress_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            logging.warning(f"进度文件 {progress_file} 读取失败，将重新开始处理: {e}")
+    return []
+#  添加进度保存函数
+def save_progress(progress_file, processed_images, start_time):
+    """保存已处理的图片名称列表和处理进度"""
+    try:
+        with open(progress_file, 'w', encoding='utf-8') as f:
+            json.dump(processed_images, f, ensure_ascii=False, indent=2)
+        # 记录进度保存日志
+        elapsed = time.time() - start_time
+        logging.info(f"已保存 {len(processed_images)} 个处理项，耗时 {elapsed:.2f} 秒")
+    except IOError as e:
+        logging.error(f"进度文件 {progress_file} 写入失败: {e}")
+
 # 修改函数定义，添加processed_images和progress_file参数
 def convert_to_yolo_format(df, class_mapping, image_cache, label_output_dir, processed_images, progress_file):
     success_count = 0
