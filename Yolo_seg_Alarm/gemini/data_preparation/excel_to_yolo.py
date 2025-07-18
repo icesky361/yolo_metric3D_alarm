@@ -484,6 +484,15 @@ def main():
     }
     total_start_time = time.time()
     # 错误日志初始化代码
+        # ===== 1. 定义输出根目录（参考log_dir的设计）=====
+    output_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
+    os.makedirs(output_root, exist_ok=True)
+        # ===== 2. 数据集处理循环 =====
+    for data_split in ['train', 'val']:
+        # 为每个数据集创建输出目录
+        output_dir = os.path.join(output_root, data_split)
+        os.makedirs(output_dir, exist_ok=True)
+    # 3. 初始化错误日志（使用当前数据集的output_dir）
     error_log_path = os.path.join(output_dir, 'error_records.csv')
     with open(error_log_path, 'w', encoding='utf-8', newline='') as f:
         writer = csv.writer(f)
@@ -620,13 +629,4 @@ if __name__ == '__main__':
     main()
 
 
-    # 初始化错误记录文件
-    error_log_path = os.path.join(output_dir, 'error_records.csv')
-    with open(error_log_path, 'w', encoding='utf-8', newline='') as f:
-        writer = csv.writer(f)
-        # 原代码
-        writer.writerow(['图片名称', '行索引', '错误类型', '原始类别', '原始坐标', '错误详情'])
-        # 修改为（保持与实际列名一致）
-        writer.writerow(['图片名称', '行索引', '错误类型', '原告警事由', '原始坐标', '错误详情'])
-        # 修改返回值为标准字典
        
