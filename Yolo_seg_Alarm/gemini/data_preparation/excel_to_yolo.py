@@ -381,8 +381,8 @@ def process_single_row(row, class_mapping, image_cache, processed_images, progre
         image_path = image_cache.get(image_name)
         result['missing'] = not image_path  # 更新missing状态
         if not image_path:
-        result['error'] = f"图片不存在于缓存中"
-        return result
+            result['error'] = f"图片不存在于缓存中"
+            return result
         for cls, coord_str in zip(classes, coords_list):
             try:
                 # 清理坐标字符串
