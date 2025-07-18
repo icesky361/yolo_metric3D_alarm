@@ -43,6 +43,7 @@ from tkinter import messagebox  #
 import time
 from datetime import datetime
 import argparse
+from functools import partial
 
 progress_lock = threading.Lock()
 log_dir = Path(__file__).parent.parent / 'logs'
@@ -160,21 +161,52 @@ def convert_to_yolo_format(df, class_mapping, image_cache, label_output_dir, pro
                     for class_name, coord_str in zip(class_names, coords_list):
                         # --- 步骤5: 解析并转换坐标 --- 
                         try:
-                            # 移除可能的方括号并分割坐标
-                            coord_str_clean = coord_str.strip('[]')
-                            coords = [float(p) for p in coord_str_clean.split(',')]
-                            if len(coords) != 4:
-                                logging.error(f"图片 {image_name} 的坐标 '{coord_str}' 格式无效，需要4个值，跳过。")
-                                success = False
-                                break
-
-                            # 归一化坐标 (x_center, y_center, width, height)
-                            x1, y1, w, h = coords
-                            x_center = (x1 + w/2) / img_w
-                            y_center = (y1 + h/2) / img_h
-                            width = w / img_w
-                            height = h / img_h
-                            normalized_coords = [x_center, y_center, width, height]
+                            # 处理分号分隔的多个坐标组
+                            # 正确处理1:N的类别-坐标组关系
+                            class_names = [cn.strip() for cn in row['告警事由'].split(',')]
+                            # 坐标组仅做一次分号分割
+                            coords_list = [coord.strip() for coord in str(row['坐标']).split(';') if coord.strip()]
+                            
+                            # 验证类别和坐标组数量匹配（1:N关系）
+                            if not class_names or len(coords_list) == 0:
+                                logging.error(f"图片 {image_name} 缺少类别或坐标信息，跳过。")
+                                error_count += 1
+                                continue
+                            
+                            # 移除内部坐标组分号分割逻辑
+                            # coord_groups = [g.strip() for g in coord_str.split(';') if g.strip()]
+                            coord_groups = [coord_str.strip()]
+                            for coord_group in coord_groups:
+                                coord_group = coord_group.strip()
+                                if not coord_group:
+                                    continue
+                                
+                                # 新增：验证方括号完整性
+                                if not (coord_group.startswith('[') and coord_group.endswith(']')):
+                                    logging.error(f"图片 {image_name} 的坐标组 '{coord_group}' 方括号不完整，跳过。")
+                                    success = False
+                                    break
+                                
+                                # 移除方括号并清理空格
+                                coord_str_clean = coord_group.strip('[]').strip()
+                                coords = [float(p.strip()) for p in coord_str_clean.split(',')]
+                                # 新增坐标范围验证
+                                if any(coord < 0 for coord in coords):
+                                    logging.error(f"图片 {image_name} 的坐标组 '{coord_group}' 包含负值，跳过。")
+                                    success = False
+                                    break
+                                if len(coords) != 4:
+                                    logging.error(f"图片 {image_name} 的坐标组 '{coord_group}' 格式无效，需要4个值，实际{len(coords)}个，跳过。")
+                                    success = False
+                                    break
+                                
+                                # 归一化坐标 (x_center, y_center, width, height)
+                                x1, y1, w, h = coords
+                                x_center = (x1 + w/2) / img_w
+                                y_center = (y1 + h/2) / img_h
+                                width = w / img_w
+                                height = h / img_h
+                                normalized_coords = [x_center, y_center, width, height]
                         except ValueError:
                             logging.error(f"图片 {image_name} 的坐标格式无效: '{coord_str}'，跳过。")
                             success = False
@@ -218,7 +250,13 @@ def convert_to_yolo_format(df, class_mapping, image_cache, label_output_dir, pro
             error_count += 1
     end_time = time.time()
     total_time = end_time - start_time
-    return success_count, missing_images, error_count, total_time
+    # 确保return语句在process_single_row函数内部
+    return {
+        'success': success,
+        'image_name': image_name,
+        'missing': image_name if not image_path else None,
+        'error': error_occurred
+    }
 
 # ===== 提前定义进度跟踪函数 =====
 # ===== 进度跟踪函数 =====
@@ -318,7 +356,7 @@ def process_single_row(row, class_mapping, image_cache, processed_images, progre
             raise ValueError("图片名称为空")
         
         # 2. 获取类别和坐标数据
-        classes_str = str(row['类别']).strip()
+        classes_str = str(row['告警事由']).strip()
         coords_str = str(row['坐标']).strip()
         
         # 3. 验证类别和坐标不为空
@@ -398,7 +436,12 @@ def process_single_row(row, class_mapping, image_cache, processed_images, progre
     except Exception as e:
         logging.error(f"处理图片 {image_name} 时发生未知错误: {str(e)}")
     
-    return result
+    return {
+        'success': success,
+        'image_name': image_name,
+        'missing': image_name if not image_path else None,
+        'error': error_occurred
+    }
 def main():
     # 添加参数解析器
     parser = argparse.ArgumentParser(description='Excel转换为YOLO格式标注工具')
@@ -422,7 +465,7 @@ def main():
     
     """
     主函数，用于编排整个数据转换流程。
-    新逻辑: 直接在原始图片目录下生成标签文件，不再复制图片。
+    新逻辑: 直接在原始图片目录下生成标签文件，不再复制图片。  
     """
     CONFIG_PATH = Path('configs/yolov11_seg.yaml')
     # 修正数据根目录路径：从gemini目录上移两级到项目根目录
@@ -484,20 +527,28 @@ def main():
             # 在main函数的任务创建处添加start_time参数
             tasks = [(row, class_mapping, image_cache, processed_images, progress_file, progress_lock, start_time, error_log_path) 
             for _, row in df_filtered.iterrows()]
+           # 使用partial固定参数，提高可读性
+            process_func = partial(process_single_row, class_mapping=class_mapping, image_cache=image_cache, processed_images=processed_images, 
+                           progress_file=progress_file, progress_lock=progress_lock, start_time=start_time, error_log_path=error_log_path)
             # 执行并行处理
             results = list(tqdm(
                 executor.map(lambda p: process_single_row(*p), tasks),
                 total=len(tasks),
-                desc=f"处理 {dataset} 数据集"
-            ))
+                desc=f"处理{data_split} 数据集",  # 将dataset改为data_split
+                           unit="项",
+                           leave=True))
 
         # --- 关键修改：统计结果 --- 
         for result in results:
-            if result['success']:
-                success_count += 1
-                processed_images.append(result['image_name'])
-            elif result['missing']:
-                stats[data_split]['missing'].append(result['missing'])
+            try:
+                if result['success']:
+                    success_count += 1
+                    processed_images.append(result['image_name'])
+                elif result['missing']:
+                    stats[data_split]['missing'].append(result['missing'])
+            except Exception as e:
+                logging.error(f"处理结果时发生错误: {str(e)}, 结果数据: {result}")
+                error_count += 1
 
         # --- 关键修改：更新统计信息 --- 
         stats[data_split]['success'] = success_count
@@ -572,5 +623,15 @@ with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
     error_log_path = os.path.join(output_dir, 'error_records.csv')
     with open(error_log_path, 'w', encoding='utf-8', newline='') as f:
         writer = csv.writer(f)
+        # 原代码
         writer.writerow(['图片名称', '行索引', '错误类型', '原始类别', '原始坐标', '错误详情'])
+        # 修改为（保持与实际列名一致）
+        writer.writerow(['图片名称', '行索引', '错误类型', '原告警事由', '原始坐标', '错误详情'])
+        # 修改返回值为标准字典
+        return {
+            'success': success,
+            'image_name': image_name,
+            'missing': image_name if not image_path else None,
+            'error': error_occurred
+        }
 
