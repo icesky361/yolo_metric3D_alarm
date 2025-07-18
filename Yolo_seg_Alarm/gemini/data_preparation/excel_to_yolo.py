@@ -483,6 +483,11 @@ def main():
         'val': {'success': 0, 'missing': [], 'error': 0, 'time': 0, 'count': 0}
     }
     total_start_time = time.time()
+    # 错误日志初始化代码
+    error_log_path = os.path.join(output_dir, 'error_records.csv')
+    with open(error_log_path, 'w', encoding='utf-8', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['图片名称', '行索引', '错误类型', '原告警事由', '原始坐标', '错误详情'])
 
     for data_split in ['train', 'val']:
         logging.info(f"\n----- 正在处理 '{data_split}' 数据集 -----")
@@ -534,9 +539,7 @@ def main():
             results = list(tqdm(
                 executor.map(lambda p: process_single_row(*p), tasks),
                 total=len(tasks),
-                desc=f"处理{data_split} 数据集",  # 将dataset改为data_split
-                           unit="项",
-                           leave=True))
+                desc=f"处理{data_split} 数据集", unit="项",leave=True))
 
         # --- 关键修改：统计结果 --- 
         for result in results:
@@ -616,9 +619,7 @@ def main():
 if __name__ == '__main__':
     main()
 
-# 使用线程池并行处理
-with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-    results = list(tqdm(executor.map(process_row, df.itertuples()), total=len(df)))
+
     # 初始化错误记录文件
     error_log_path = os.path.join(output_dir, 'error_records.csv')
     with open(error_log_path, 'w', encoding='utf-8', newline='') as f:
@@ -628,10 +629,4 @@ with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
         # 修改为（保持与实际列名一致）
         writer.writerow(['图片名称', '行索引', '错误类型', '原告警事由', '原始坐标', '错误详情'])
         # 修改返回值为标准字典
-        return {
-            'success': success,
-            'image_name': image_name,
-            'missing': image_name if not image_path else None,
-            'error': error_occurred
-        }
-
+       
