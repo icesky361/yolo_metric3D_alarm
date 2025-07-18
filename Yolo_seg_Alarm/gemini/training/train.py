@@ -140,7 +140,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="训练一个YOLOv8分割模型。")
     
     # 添加 '--config' 参数，用于指定训练配置文件的路径
-    parser.add_argument('--config', type=str, default='d:\\program\\python\\PythonProject\\Yolo_seg_Alarm\\Yolo_seg_Alarm\\gemini\\configs\\yolov11_seg.yaml', help='Path to the configuration YAML file')
+    # 使用动态路径构造，避免硬编码绝对路径
+    default_config = Path(__file__).resolve().parents[1] / 'configs' / 'yolov11_seg.yaml'
+    parser.add_argument('--config', type=str, default=str(default_config), help='Path to the configuration YAML file')
     
     # 解析命令行传入的参数
     args = parser.parse_args()
