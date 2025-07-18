@@ -96,6 +96,15 @@ def build_image_cache(base_dir):
             cache[path.name] = path
     return cache
 # 修改函数参数，将image_base_dir改为image_cache
+# 添加进度文件路径函数（插入在此处）
+def get_progress_file_path(data_split):
+    # 获取当前脚本所在目录（data_preparation）
+    current_dir = Path(__file__).parent
+    # 创建progress子目录
+    progress_dir = current_dir / 'progress'
+    progress_dir.mkdir(exist_ok=True)
+    # 返回进度文件路径
+    return progress_dir / f'{data_split}_progress.json'
 # 修改函数定义，添加processed_images和progress_file参数
 def convert_to_yolo_format(df, class_mapping, image_cache, label_output_dir, processed_images, progress_file):
     success_count = 0
@@ -208,249 +217,78 @@ def convert_to_yolo_format(df, class_mapping, image_cache, label_output_dir, pro
                                 width = w / img_w
                                 height = h / img_h
                                 normalized_coords = [x_center, y_center, width, height]
-                        except ValueError:
-                            logging.error(f"图片 {image_name} 的坐标格式无效: '{coord_str}'，跳过。")
+
+                            # 1. 坐标预处理 - 仅移除首尾空白和括号（兼容有/无括号两种格式）
+                            coord_str_clean = coord_str.strip().strip('[](){}')
+                            if not coord_str_clean:
+                                raise ValueError("坐标字符串为空")
+
+                            # 2. 坐标分割 - 仅使用逗号分割（与旧旧.py保持一致）
+                            # 支持中英文逗号和可能的空格（如"100, 200, 300, 400"）
+                            coord_values = re.split(r'[,，\s]+', coord_str_clean)
+                            coords = [float(coord.strip()) for coord in coord_values if coord.strip()]
+
+                            # 3. 坐标验证 - 支持矩形(4值)和多边形(N值)两种格式
+                            if len(coords) < 4:
+                                raise ValueError(f"坐标数量不足，至少需要4个值，实际获得{len(coords)}个")
+
+                            # 4. 针对矩形坐标的归一化处理（与旧旧.py逻辑完全一致）
+                            if len(coords) == 4:
+                                x1, y1, w, h = coords
+                                # 添加坐标有效性检查（非负性验证）
+                                if x1 < 0 or y1 < 0 or w <= 0 or h <= 0:
+                                    raise ValueError(f"坐标值无效，包含负数或零: x1={x1}, y1={y1}, w={w}, h={h}")
+                                x_center = (x1 + w/2) / img_w
+                                y_center = (y1 + h/2) / img_h
+                                width = w / img_w
+                                height = h / img_h
+                            else:
+                                # 5. 多边形坐标处理（新增功能，旧旧.py未实现）
+                                normalized_coords = [coord / img_w if i % 2 == 0 else coord / img_h for i, coord in enumerate(coords)]
+                                x_center, y_center, width, height = calculate_bbox_from_polygon(normalized_coords)
+
+                            normalized_coords = [x_center, y_center, width, height]
+
+                            # 如果所有验证通过，处理标注文件
+                            class_id = class_mapping.get(cls, -1)
+                            if class_id == -1:
+                                continue
+
+                            with open(label_path, 'a', encoding='utf-8') as f:
+                                f.write(f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}\n")
+                            result['success'] = True
+                            
+                        except ValueError as e:
+                            # 增强错误日志，输出原始坐标字符串便于调试
+                            logging.error(f"图片 {image_name} 的坐标 '{coord_str}' 解析失败: {str(e)}")
                             success = False
                             break
-
-                        # --- 步骤6: 获取类别ID --- 
-                        if class_name not in class_mapping:
-                            logging.warning(f"类别 '{class_name}' 不在配置文件中，跳过。")
-                            success = False
-                            break
-                        class_id = class_mapping[class_name]
-
-                        # --- 步骤7: 生成YOLO格式字符串并写入 --- 
-                        yolo_line = f"{class_id} " + " ".join([f"{p:.6f}" for p in normalized_coords]) + "\n"
-                        f.write(yolo_line)
-                # 原子操作替换目标文件并处理可能的异常
-                if temp_path.exists():
-                    try:
-                        os.replace(temp_path, label_path)
-                    except PermissionError as e:
-                        if attempt < retries - 1:
-                            time.sleep(0.5)
-                            logging.warning(f"文件替换失败，将重试: {e}")
+                        except PermissionError as e:
+                            logging.error(f"文件 {label_path} 写入失败: {str(e)}")
                             continue
-                        else:
-                            if temp_path.exists():
-                                temp_path.unlink()
-                            logging.error(f"所有重试均失败，无法写入文件: {label_path}")
-                            raise
-                success_write = True
-                break
-            except PermissionError:
-                if attempt < retries - 1:
-                    time.sleep(1.0)  # 延长等待时间至1秒
-                    logging.warning(f"文件 {label_path} 被占用，正在重试...(尝试 {attempt+1}/{retries})")
-                else:
-                    logging.error(f"无法写入文件 {label_path}，可能被其他程序占用")
-        if success and success_write:
-            success_count += 1
-        else:
-            error_count += 1
-    end_time = time.time()
-    total_time = end_time - start_time
-    # 确保return语句在process_single_row函数内部
-    return {
-        'success': success,
-        'image_name': image_name,
-        'missing': image_name if not image_path else None,
-        'error': error_occurred
-    }
-
-# ===== 提前定义进度跟踪函数 =====
-# ===== 进度跟踪函数 =====
-def get_progress_file_path(data_split: str) -> Path:
-    """
-    生成固定命名的进度文件路径（确保断点续跑时能加载旧进度）
-    
-    参数:
-        data_split (str): 数据集类型（如'train'/'val'）
-    
-    返回:
-        Path: 进度文件的Path对象
-    """
-    from pathlib import Path  # 局部导入避免污染全局命名空间
-    progress_dir = Path(__file__).parent / "progress"  # 基于当前文件路径构造进度目录
-    progress_dir.mkdir(exist_ok=True)  # 自动创建目录（存在则忽略）
-    return progress_dir / f"{data_split}_progress.json"  # 固定文件名（无时间戳）
-
-# ===== 进度跟踪函数结束 =====
-
-def load_progress(progress_file: Path):
-    """
-    加载已保存的进度文件，兼容旧格式（列表/字典）
-    参数:
-        progress_file (Path): 进度文件路径
-    返回:
-        list: 已处理图片名称列表（空列表表示无进度或加载失败）
-    """
-    # 1. 检查文件是否存在
-    if not progress_file.exists():
-        logging.info(f"进度文件不存在: {progress_file}")
-        return []
-
-    # 2. 尝试读取并解析JSON
-    try:
-        with open(progress_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-    except json.JSONDecodeError as e:
-        logging.warning(f"进度文件 {progress_file} 格式错误（JSON解析失败）: {e}，将从头开始处理")
-        return []
-    except Exception as e:
-        logging.error(f"加载进度文件 {progress_file} 失败: {e}")
-        return []
-
-    # 3. 兼容旧格式（列表或字典）
-    if isinstance(data, list):
-        # 旧格式：直接返回列表（已处理图片）
-        return data
-    elif isinstance(data, dict):
-        # 新格式：提取 'processed_images' 字段（可能为列表或集合）
-        processed = data.get('processed_images', [])
-        # 确保返回列表（兼容集合类型）
-        return list(processed) if isinstance(processed, (list, set)) else []
-    else:
-        # 未知格式：返回空列表
-        logging.warning(f"进度文件 {progress_file} 格式未知，将从头开始处理")
-        return []
-
-def save_progress(progress_file, processed_images, start_time, log_message=False):
-    """
-    保存当前处理进度到JSON文件
-    参数:
-        progress_file (Path): 进度文件路径
-        processed_images (list): 已处理图片名称列表
-        start_time (float): 任务开始时间戳
-    """
-    try:
-        progress_data = {
-            'processed_images': processed_images,  # 已处理图片列表（列表类型）
-            'start_time': start_time,  # 任务开始时间戳（兼容续跑计时）
-            'last_updated': datetime.now().timestamp()  # 最后更新时间戳（新增，用于判断进度时效性）
-        }
-        # 兼容旧格式：如果processed_images是集合，转换为列表
-        if isinstance(processed_images, set):
-            progress_data['processed_images'] = list(processed_images)
-        # 写入文件（使用indent保持可读性，ensure_ascii=False支持中文路径）
-        with open(progress_file, 'w', encoding='utf-8') as f:
-            json.dump(progress_data, f, ensure_ascii=False, indent=2)
-        
-        # 仅在需要时打印日志
-        if log_message:
-            logging.info(f"进度已保存至: {progress_file}")
-    except Exception as e:
-        logging.error(f"保存进度失败: {e}")
-        raise  # 抛出异常以便上层捕获处理
-def process_single_row(row, class_mapping, image_cache, processed_images, progress_file, progress_lock, start_time, error_log_path):
-    image_name = str(row['图片名称']).strip()
-    row_index = row.name
-    errors = []
-    result = {'success': False,'image_name': image_name,'missing': False,'error': None,'time': 0}
-    process_start_time = time.time()
-    try:
-        # 1. 验证基本数据
-        if not image_name:
-            errors.append("图片名称为空")
-            raise ValueError("图片名称为空")
-        
-        # 2. 获取类别和坐标数据
-        classes_str = str(row['告警事由']).strip()
-        coords_str = str(row['坐标']).strip()
-        
-        # 3. 验证类别和坐标不为空
-        if not classes_str:
-            errors.append("类别数据为空")
-        if not coords_str:
-            errors.append("坐标数据为空")
-        if errors:
-            raise ValueError(", ".join(errors))
-        
-        # 4. 分割类别和坐标
-        classes = [cls.strip() for cls in classes_str.split(',') if cls.strip()]
-        coords_list = [coord.strip() for coord in coords_str.split(';') if coord.strip()]
-        
-        # 5. 验证类别和坐标数量匹配
-        if len(classes) != len(coords_list):
-            raise ValueError(f"类别与坐标数量不匹配: 类别{len(classes)}个, 坐标{len(coords_list)}个")
-        
-        # 6. 处理每个目标的坐标
-        yolo_annotations = []
-         # 添加图片路径获取逻辑
-        image_path = image_cache.get(image_name)
-        result['missing'] = not image_path  # 更新missing状态
-        if not image_path:
-            result['error'] = f"图片不存在于缓存中"
-            return result
-        for cls, coord_str in zip(classes, coords_list):
-            try:
-                # 清理坐标字符串
-                coord_str_clean = coord_str.replace(' ', '').replace(',,', ',').strip(',')
-                coord_parts = [p for p in coord_str_clean.split(',') if p.strip()]
-
-                # 验证坐标格式是否为4的倍数
-                if len(coord_parts) != 4:
-                    error_writer.writerow([image_name, row_index, '坐标数量错误', f'类别数量: {len(classes)}, 坐标数量: {len(coords_list)}, 原始坐标: {coord_str}'])
-                    return False
-
-                # 转换坐标为浮点数
-                try:
-                    coords = [float(p) for p in coord_parts]
-                except ValueError as e:
-                    raise ValueError(f"坐标转换失败: {str(e)}") from e
-
-                # 验证坐标值为非负数
-                if any(coord < 0 for coord in coords):
-                    error_writer.writerow([image_name, row_index, '坐标值为负数', f'原始坐标: {coord_str}'])
-                    return False
-
-                # 坐标归一化计算
-                x1, y1, w, h = coords
-                x_center = (x1 + w/2) / img_w
-                y_center = (y1 + h/2) / img_h
-                width = w / img_w
-                height = h / img_h
-                normalized_coords = [x_center, y_center, width, height]
-
-                # 如果所有验证通过，处理标注文件
-                class_id = class_mapping.get(cls, -1)
-                if class_id == -1:
-                    continue
-
-                with open(label_path, 'a', encoding='utf-8') as f:
-                    f.write(f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}\n")
-                result['success'] = True
-                
+                        
+                # 保存进度（使用线程锁）
+                if result['success'] :
+                    with progress_lock:
+                        processed_images.append(image_name)
+                        if len(processed_images) % 10 == 0:
+                            save_progress(progress_file, processed_images, start_time)
+                    result['success'] = True
+                    
             except ValueError as e:
-                logging.error(f"图片 {image_name} 的坐标格式无效: '{coord_str}'，跳过。")
-                continue
-            except PermissionError as e:
-                logging.error(f"文件 {label_path} 写入失败: {str(e)}")
-                continue
-            
-        # 保存进度（使用线程锁）
-        if result['success'] :
-            with progress_lock:
-                processed_images.append(image_name)
-                if len(processed_images) % 10 == 0:
-                    save_progress(progress_file, processed_images, start_time)
-            result['success'] = True
-            
-    except ValueError as e:
-        logging.error(f"处理图片 {image_name} 时发生验证错误: {str(e)}")
-    except Exception as e:
-        logging.error(f"处理图片 {image_name} 时发生未知错误: {str(e)}")
-        result['error'] = str(e)  # 记录错误信息
-    # 计算处理时间
-    result['time'] = time.time() - process_start_time
-    return result  # 返回统一的result字典
-    return {
-        'success': success,
-        'image_name': image_name,
-        'missing': image_name if not image_path else None,
-        'error': error_occurred
-    }
+                logging.error(f"处理图片 {image_name} 时发生验证错误: {str(e)}")
+            except Exception as e:
+                logging.error(f"处理图片 {image_name} 时发生未知错误: {str(e)}")
+                result['error'] = str(e)  # 记录错误信息
+            # 计算处理时间
+            result['time'] = time.time() - process_start_time
+            return result  # 返回统一的result字典
+            return {
+                'success': success,
+                'image_name': image_name,
+                'missing': image_name if not image_path else None,
+                'error': error_occurred
+            }
 def main():
     # 添加参数解析器
     parser = argparse.ArgumentParser(description='Excel转换为YOLO格式标注工具')
