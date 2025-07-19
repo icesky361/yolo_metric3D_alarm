@@ -185,40 +185,39 @@ def get_progress_file_path(data_split):
 #  添加进度加载函数
 def load_progress(progress_file):
     """
-    从指定的进度文件（JSON格式）中加载已经处理过的图片名称列表。
-    如果文件不存在或读取失败（如JSON格式损坏），则返回一个空列表，相当于从头开始处理。
+    从指定的进度文件（JSON格式）中加载已经处理过的图片名称集合。
+    使用集合（set）可以提供更快的查找性能（O(1)），这在处理大量数据时非常重要。
 
     Args:
         progress_file (Path): 进度文件的路径。
 
     Returns:
-        list: 已处理图片名称的列表。
+        set: 已处理图片名称的集合。
     """
     if progress_file.exists():
         try:
             with open(progress_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                # 将加载的列表转换为集合，以便快速查找
+                return set(json.load(f))
         except (json.JSONDecodeError, IOError) as e:
             logging.warning(f"进度文件 {progress_file} 读取失败，将重新开始处理: {e}")
-    return []
+    return set()  # 如果文件不存在或读取失败，返回一个空集合
 #  添加进度保存函数
-# 修改函数定义，添加processed_images和progress_file参数
-def save_progress(progress_file, processed_images, start_time):
+def save_progress(progress_file, all_processed_images):
     """
-    将当前已处理的图片名称列表保存到指定的进度文件中（JSON格式）。
+    将当前所有已处理的图片名称集合安全地保存到指定的进度文件中。
 
     Args:
         progress_file (Path): 进度文件的路径。
-        processed_images (list or set): 包含所有已成功处理的图片名称的集合。
-        start_time (float): 处理开始的时间戳，用于计算总耗时。
+        all_processed_images (set): 包含所有已成功处理的图片名称的集合。
     """
     try:
-        # 使用 'w' 模式写入，会覆盖旧文件
-        with open(progress_file, 'w', encoding='utf-8') as f:
-            # 将列表转换为JSON格式并写入文件，设置缩进以提高可读性
-            json.dump(list(processed_images), f, ensure_ascii=False, indent=2)
-        elapsed = time.time() - start_time
-        logging.info(f"进度已保存至 {progress_file}。共 {len(processed_images)} 个项目，总耗时 {elapsed:.2f} 秒")
+        # 使用线程锁确保文件写入操作的原子性，防止在多线程或并发场景下出现问题。
+        with progress_lock:
+            with open(progress_file, 'w', encoding='utf-8') as f:
+                # 将集合转换为列表以便JSON序列化，并写入文件。
+                json.dump(list(all_processed_images), f, ensure_ascii=False, indent=2)
+        logging.info(f"进度已成功保存至 {progress_file}。当前总计已处理 {len(all_processed_images)} 个项目。")
     except IOError as e:
         logging.error(f"进度文件 {progress_file} 写入失败: {e}")
 
@@ -414,6 +413,31 @@ def main():
         if not excel_path:
             logging.warning(f"未给 '{data_split}' 数据集选择Excel文件，跳过。")
             continue
+
+        # --- 3. 进度管理与断点续传 ---
+        # 首先确定进度文件路径
+        progress_file = get_progress_file_path(data_split)
+
+        # 进度管理：检查是否存在旧进度，并让用户选择是否继续。
+        if progress_file.exists() and progress_file.stat().st_size > 0:
+            # 弹出对话框询问用户
+            user_choice = messagebox.askyesno(
+                title="发现旧进度",
+                message=f"检测到 '{data_split}' 数据集存在未完成的进度。\n\n是否要继续上次的任务？\n\n- 选择【是】将从上次中断的地方继续。\n- 选择【否】将开始一个全新的任务，并清空旧进度。"
+            )
+            
+            if not user_choice: # 如果用户选择“否”（No），则开始新任务
+                logging.info("用户选择开始新任务，正在初始化进度文件...")
+                try:
+                    with open(progress_file, 'w', encoding='utf-8') as f:
+                        json.dump([], f) # 清空文件内容
+                    logging.info(f"进度文件 {progress_file} 已成功初始化。")
+                except IOError as e:
+                    logging.error(f"无法初始化进度文件 {progress_file}: {e}")
+            else:
+                logging.info("用户选择继续上次的任务。")
+        else:
+            logging.info("未发现有效进度文件，将开始新任务。")
         
         # 使用pandas读取Excel文件内容到DataFrame
         try:
@@ -436,9 +460,8 @@ def main():
         image_cache = build_image_cache(image_base_dir)
         logging.info(f"已为 '{data_split}' 构建图片缓存，包含 {len(image_cache)} 张图片")
 
-        # --- 3. 断点续传逻辑 ---
-        progress_file = get_progress_file_path(data_split)
-        processed_images = set(load_progress(progress_file)) # 加载已处理过的图片名
+        # 加载进度（此时应为空，因为我们刚删除了文件）
+        processed_images_set = load_progress(progress_file) # 加载已处理过的图片名集合
         
         # 检查关键列 '图片名称' 是否存在
         if '图片名称' not in df_labels.columns:
@@ -447,14 +470,11 @@ def main():
             continue
             
         # 从DataFrame中筛选出尚未处理的行
-        df_filtered = df_labels[~df_labels['图片名称'].isin(processed_images)]
+        df_filtered = df_labels[~df_labels['图片名称'].isin(processed_images_set)]
         total_to_process = len(df_filtered)
 
-        # 如果没有需要处理的新数据，则清理掉旧的进度文件并跳到下一个数据集
         if total_to_process == 0:
             logging.info(f"'{data_split}' 数据集中的所有图片均已处理。")
-            if progress_file.exists():
-                progress_file.unlink() # 删除无用的进度文件
             continue
         
         logging.info(f"发现 {total_to_process} 个新项目，开始处理...")
@@ -485,22 +505,36 @@ def main():
                 unit="项"
             ))
 
-        # --- 5. 结果汇总与进度保存 ---
-        # 遍历所有子线程返回的结果，进行分类统计。
-        for result in results:
+        # --- 5. 结果汇总与定期进度保存 ---
+        newly_processed_images = set()
+        save_interval_seconds = 60  # 每60秒保存一次进度
+        last_save_time = time.time()
+
+        # 遍历所有子线程返回的结果，进行分类统计和定期保存
+        for i, result in enumerate(results):
             if result['success']:
                 stats[data_split]['success'] += 1
-                # 只有成功处理的才加入到已完成列表
-                processed_images.add(result['image_name'])
+                newly_processed_images.add(result['image_name'])
             elif result['missing']:
                 stats[data_split]['missing'].add(result['missing'])
             else:
                 stats[data_split]['error'] += 1
 
+            # 检查是否达到了保存进度的时间间隔
+            current_time = time.time()
+            if current_time - last_save_time >= save_interval_seconds:
+                if newly_processed_images:
+                    all_processed_images = processed_images_set.union(newly_processed_images)
+                    save_progress(progress_file, all_processed_images)
+                    last_save_time = current_time
+        
         # 记录该数据集的处理总耗时
         stats[data_split]['time'] = time.time() - split_start_time
-        # 保存当前进度，以便下次可以断点续传
-        save_progress(progress_file, processed_images, total_start_time)
+
+        # --- 循环结束后，最终保存一次以确保所有进度都被记录 ---
+        if newly_processed_images:
+            all_processed_images = processed_images_set.union(newly_processed_images)
+            save_progress(progress_file, all_processed_images)
 
     # --- 6. 生成最终统计报告 ---
     total_time = time.time() - total_start_time
