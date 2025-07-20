@@ -267,7 +267,7 @@ def save_progress(progress_file, all_processed_images, stats_to_save):
         with progress_lock:
             with open(progress_file, 'w', encoding='utf-8') as f:
                 json.dump(progress_data, f, ensure_ascii=False, indent=2)
-        logging.info(f"进度已成功保存至 {progress_file}。当前总计已处理 {len(all_processed_images)} 个项目。")
+        logging.info(f"进度已更新，已处理 {len(all_processed_images)} 个项目。")
     except IOError as e:
         logging.error(f"进度文件 {progress_file} 写入失败: {e}")
 
@@ -569,7 +569,7 @@ def main():
                 progress_bar = tqdm(results_iterator, 
                                     total=total_items_in_excel,  # 总数是Excel中的总行数
                                     initial=len(processed_images_set), # 初始值是已处理的数量
-                                    desc=f"处理 {data_split} 数据集", 
+                                    desc=f"当前处理 {data_split} 数据集总计", 
                                     unit="项")
 
                 for i, result in enumerate(progress_bar, 1):
@@ -594,7 +594,7 @@ def main():
                         # 清空当前批次的集合和统计
                         newly_processed_images.clear()
                         current_run_stats[data_split] = {'success': 0, 'missing': set(), 'error': 0, 'time': 0}
-                        logging.info(f"进度已保存。已处理 {len(all_processed_so_far)}/{total_items_in_excel} 项。")
+                        
             
             # --- 循环结束后，最终保存一次以确保所有进度都被记录 ---
             if newly_processed_images:
