@@ -503,11 +503,15 @@ def main():
                     message=f"检测到 '{data_split}' 数据集存在未完成的进度（已处理 {len(processed_images_set)} 项）。\n\n是否要继续上次的任务？\n\n- 选择【是】将从上次中断的地方继续。\n- 选择【否】将开始一个全新的任务，并清空旧进度。"
                 )
                 if not user_choice:
-                    logging.info("用户选择开始新任务，正在清空旧进度...")
+                    logging.info("用户选择开始新任务，正在清空所有数据集进度...")
+                    # 同时清空train和val的进度文件
+                    for ds in ['train', 'val']:
+                        ds_progress_file = get_progress_file_path(ds)
+                        if ds_progress_file.exists():
+                            save_progress(ds_progress_file, set(), {'success': 0, 'missing': set(), 'error': 0, 'time': 0})
+                    # 重置当前数据集的处理状态
                     processed_images_set.clear()
-                    historical_stats = {'success': 0, 'missing': set(), 'error': 0, 'time': 0} # 重置统计
-                    # 清空进度文件
-                    save_progress(progress_file, set(), historical_stats)
+                    historical_stats = {'success': 0, 'missing': set(), 'error': 0, 'time': 0}
             
             df_labels = pd.read_excel(excel_path)
             total_items_in_excel = len(df_labels)
