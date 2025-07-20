@@ -252,13 +252,16 @@ def save_progress(progress_file, all_processed_images, stats_to_save):
         all_processed_images (set): 包含所有已成功处理的图片名称的集合。
         stats_to_save (dict): 需要保存的累计统计数据。
     """
+    # 创建一个 stats_to_save 的副本以避免修改原始字典
+    stats_copy = stats_to_save.copy()
+
     # 为了能被JSON序列化，需要将set转换为list
-    if isinstance(stats_to_save.get('missing'), set):
-        stats_to_save['missing'] = list(stats_to_save['missing'])
+    if isinstance(stats_copy.get('missing'), set):
+        stats_copy['missing'] = list(stats_copy['missing'])
 
     progress_data = {
         'processed_images': list(all_processed_images),
-        'stats': stats_to_save
+        'stats': stats_copy
     }
     try:
         with progress_lock:
