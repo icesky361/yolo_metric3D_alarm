@@ -220,10 +220,22 @@ def load_progress(progress_file):
         try:
             with open(progress_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                # 确保加载的数据包含所有必需的键
-                processed_images = set(data.get("processed_images", []))
-                # 加载的stats中的missing可能是一个列表，需要转为set
-                loaded_stats = data.get("stats", default_progress['stats'])
+                # 检查加载的数据是字典还是列表，以兼容旧格式
+                if isinstance(data, dict):
+                    # 新格式：数据是字典
+                    processed_images = set(data.get("processed_images", []))
+                    # 加载的stats中的missing可能是一个列表，需要转为set
+                    loaded_stats = data.get("stats", default_progress['stats'])
+                elif isinstance(data, list):
+                    # 兼容旧格式：数据是列表，只包含图片
+                    processed_images = set(data)
+                    loaded_stats = default_progress['stats']
+                else:
+                    # 未知格式，使用默认值
+                    logging.warning(f"进度文件 {progress_file} 格式未知，将创建新的进度。")
+                    return set(), default_progress['stats']
+
+                # 确保 loaded_stats['missing'] 是一个集合
                 loaded_stats['missing'] = set(loaded_stats.get('missing', []))
                 return processed_images, loaded_stats
         except (json.JSONDecodeError, IOError) as e:
@@ -497,8 +509,17 @@ def main():
             df_labels = pd.read_excel(excel_path)
             total_items_in_excel = len(df_labels)
             total_stats[data_split]['total'] = total_items_in_excel # 记录总条目数
-            # 将历史统计数据加载到总统计中
-            total_stats[data_split].update(historical_stats)
+            # 安全地合并历史统计数据
+            for key, value in historical_stats.items():
+                if key == 'missing':
+                    # 确保missing字段是集合，并用集合的方式合并
+                    total_stats[data_split]['missing'].update(value)
+                elif key in total_stats[data_split]:
+                    # 对于数值类型的统计，进行累加
+                    total_stats[data_split][key] += value
+                else:
+                    # 其他新出现的键，直接赋值
+                    total_stats[data_split][key] = value
 
             image_base_dir = DATA_ROOT / data_split / 'images'
             if not image_base_dir.exists():
