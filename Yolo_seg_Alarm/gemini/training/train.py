@@ -51,6 +51,7 @@ import argparse
 import yaml
 from pathlib import Path
 import logging
+import tempfile  # 添加tempfile模块导入
 from ultralytics import YOLO
 
 # 将项目根目录添加到系统路径中，以便能够正确导入 'utils' 模块
@@ -61,7 +62,26 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 from utils.environment import get_device_and_adjust_config
 
 # 配置日志记录，用于在控制台输出格式化的时间、日志级别和消息
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+import os
+from datetime import datetime
+
+# 创建日志目录
+log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'logs')
+os.makedirs(log_dir, exist_ok=True)
+
+# 生成带日期的日志文件名
+log_filename = f"data_prep_{datetime.now().strftime('%Y%m%d')}.log"
+log_filepath = os.path.join(log_dir, log_filename)
+
+# 配置日志同时输出到控制台和文件
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_filepath),
+        logging.StreamHandler()
+    ]
+)
 
 def train(config_path: str):
     """
@@ -166,10 +186,57 @@ if __name__ == '__main__':
 
     # 使用解析到的配置路径调用train函数
     # 准备数据集配置
+    # 修复路径大小写问题并确保正确指向标签目录
+    # 构建并验证数据集路径
+    # 直接使用包含图片和标签的目录（同一文件夹）
+    train_labels_path = os.path.abspath(os.path.join(config['path'], config['train']))
+    val_labels_path = os.path.abspath(os.path.join(config['path'], config['val']))
+    
+    # 递归查找所有图像文件并生成文件列表
+    def get_image_paths(directory):
+        image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.gif']
+        image_paths = []
+        for root, _, files in os.walk(directory):
+            for file in files:
+                if any(file.lower().endswith(ext) for ext in image_extensions):
+                    # 检查对应标签文件是否存在
+                    label_path = os.path.splitext(os.path.join(root, file))[0] + '.txt'
+                    if os.path.exists(label_path):
+                        image_paths.append(os.path.join(root, file))
+                    else:
+                        logging.warning(f"跳过无标签图像: {os.path.join(root, file)}")
+        return image_paths
+    
+    # 获取数据集根目录
+    root_data_path = config['path'].replace('Data', 'data')
+    
+    # 获取训练和验证集图像的相对路径
+    train_images = [os.path.relpath(path, root_data_path) for path in get_image_paths(train_labels_path)]
+    val_images = [os.path.relpath(path, root_data_path) for path in get_image_paths(val_labels_path)]
+    
+    # 记录有效图像数量
+    logging.info(f"找到 {len(train_images)} 个训练图像和标签对")
+    logging.info(f"找到 {len(val_images)} 个验证图像和标签对")
+    
+    # 创建临时文件列表
+    train_txt = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False).name
+    val_txt = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False).name
+    
+    # 验证临时文件路径
+    logging.info(f"训练文件列表路径: {train_txt}")
+    logging.info(f"验证文件列表路径: {val_txt}")
+    
+    # 写入图像路径
+    with open(train_txt, 'w') as f:
+        f.write('\n'.join(train_images))
+    with open(val_txt, 'w') as f:
+        f.write('\n'.join(val_images))
+    
+    # 更新数据配置使用文件列表
     data_dict = {
-        'path': config['path'],
-        'train': config['train'],
-        'val': config['val'],
+        'path': config['path'].replace('Data', 'data'),
+        'train': train_txt,
+        'val': val_txt,
         'nc': config['nc'],
         'names': config['names']
     }
@@ -182,8 +249,15 @@ if __name__ == '__main__':
         temp_yaml_path = f.name
 
     # 开始训练
+    # 添加异常捕获以确保日志完整记录
+try:
     model.train(data=temp_yaml_path, epochs=config['epochs'], batch=config['batch'], imgsz=config['img_size'], workers=0)
+except Exception as e:
+    logging.error(f"训练过程中发生致命错误: {str(e)}", exc_info=True)
+    raise  # 重新抛出异常以便终端显示
     
-    # 清理临时文件
+    # 清理所有临时文件
     import os
     os.remove(temp_yaml_path)
+    os.remove(train_txt)
+    os.remove(val_txt)
