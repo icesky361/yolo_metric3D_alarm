@@ -45,6 +45,9 @@ Yolo_seg_Alarm/gemini/reports/
 *.png
 *.jpg
 *.jpeg
+# 忽略进度文件
+Yolo_seg_Alarm/gemini/data_preparation/progress/*.json
+Yolo_seg_Alarm/gemini/data_preparation/progress/*.log
 *.bmp
 *.gif
 *.bmp
