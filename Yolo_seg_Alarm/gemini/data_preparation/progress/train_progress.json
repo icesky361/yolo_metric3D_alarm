@@ -1,14 +1,9 @@
 {
-  "processed_images": [
-    "86728005286281000_20250704000004_2.jpg",
-     ],
+  "processed_images": [],
   "stats": {
-    "success": 50,
-    "missing": [
-      "86728005287178700_20250703230002_2.jpg",
-        ],
+    "success": 0,
+    "missing": [],
     "error": 0,
-    "total": 6905,
     "time": 0
   }
 }
