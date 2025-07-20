@@ -77,24 +77,42 @@ import csv
 # 创建一个线程锁，用于在多线程环境下安全地写入错误日志，防止数据竞争。
 progress_lock = threading.Lock()
 
-# --- 日志配置 ---
-# 定义日志文件存放目录，位于项目根目录下的 'logs' 文件夹中。
-log_dir = Path(__file__).parent.parent / 'logs'
-log_dir.mkdir(exist_ok=True)  # 如果目录不存在，则创建它。
+    # --- 1. 配置智能日志记录 ---
+    log_dir = Path(__file__).parent.parent / 'logs'
+    log_dir.mkdir(exist_ok=True)
 
-# 定义日志文件名，包含时间戳以确保每次运行的日志都是唯一的。
-log_file = log_dir / f"excel_to_yolo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    # 检查上一次的日志文件状态
+    today_str = datetime.now().strftime('%Y%m%d')
+    # 寻找昨天的或更早的日志文件，这里简化为查找最新的一个日志文件
+    log_files = sorted(log_dir.glob('excel_to_yolo_*.log'), key=os.path.getmtime, reverse=True)
+    if log_files:
+        last_log_file = log_files[0]
+        try:
+            with open(last_log_file, 'r', encoding='utf-8') as f:
+                # 读取最后几行来判断是否正常结束
+                lines = f.readlines()
+                last_lines = "".join(lines[-5:]) # 查看最后5行
+                if "数据准备流程结束" not in last_lines and not last_log_file.name.endswith('_con.log'):
+                    # 如果没有正常结束，并且没有被标记过，则重命名
+                    new_name = last_log_file.stem + '_con.log'
+                    new_path = last_log_file.with_name(new_name)
+                    shutil.move(last_log_file, new_path)
+                    print(f"检测到上次运行未正常结束，已将日志文件重命名为: {new_path.name}")
+        except Exception as e:
+            print(f"检查旧日志文件时出错: {e}")
 
-# 配置logging模块，使其同时向文件和控制台输出日志。
-logging.basicConfig(
-    level=logging.INFO,  # 设置日志级别为INFO，记录所有INFO、WARNING、ERROR级别的日志。
-    format='%(asctime)s - %(levelname)s - %(message)s',  # 定义日志格式。
-    handlers=[
-        logging.FileHandler(log_file, encoding='utf-8'),  # 将日志写入文件。
-        logging.StreamHandler()  # 将日志输出到控制台。
-    ]
-)
-logging.info(f"日志文件已保存至: {log_file}")
+    # 为本次运行创建新的日志文件
+    log_file_path = log_dir / f"excel_to_yolo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file_path, encoding='utf-8'),
+            logging.StreamHandler()
+        ]
+    )
+    logging.info(f"日志文件已保存至: {log_file_path}")
 
 def select_excel_file(title="请选择Excel标注文件"):
     """
@@ -185,38 +203,55 @@ def get_progress_file_path(data_split):
 #  添加进度加载函数
 def load_progress(progress_file):
     """
-    从指定的进度文件（JSON格式）中加载已经处理过的图片名称集合。
-    使用集合（set）可以提供更快的查找性能（O(1)），这在处理大量数据时非常重要。
+    从指定的进度文件（JSON格式）中加载进度，包括已处理图片和历史统计数据。
 
     Args:
         progress_file (Path): 进度文件的路径。
 
     Returns:
-        set: 已处理图片名称的集合。
+        tuple: 包含 (已处理图片名称集合, 历史统计数据字典)。
     """
-    if progress_file.exists():
+    # 定义一个空的默认进度结构
+    default_progress = {
+        "processed_images": [],
+        "stats": {"success": 0, "missing": set(), "error": 0, "time": 0}
+    }
+    if progress_file.exists() and progress_file.stat().st_size > 0:
         try:
             with open(progress_file, 'r', encoding='utf-8') as f:
-                # 将加载的列表转换为集合，以便快速查找
-                return set(json.load(f))
+                data = json.load(f)
+                # 确保加载的数据包含所有必需的键
+                processed_images = set(data.get("processed_images", []))
+                # 加载的stats中的missing可能是一个列表，需要转为set
+                loaded_stats = data.get("stats", default_progress['stats'])
+                loaded_stats['missing'] = set(loaded_stats.get('missing', []))
+                return processed_images, loaded_stats
         except (json.JSONDecodeError, IOError) as e:
-            logging.warning(f"进度文件 {progress_file} 读取失败，将重新开始处理: {e}")
-    return set()  # 如果文件不存在或读取失败，返回一个空集合
+            logging.warning(f"进度文件 {progress_file} 读取或解析失败，将创建新的进度: {e}")
+    # 如果文件不存在、为空或读取失败，返回默认的空进度
+    return set(), default_progress['stats']
 #  添加进度保存函数
-def save_progress(progress_file, all_processed_images):
+def save_progress(progress_file, all_processed_images, stats_to_save):
     """
-    将当前所有已处理的图片名称集合安全地保存到指定的进度文件中。
+    将当前所有已处理的图片名称集合和累计的统计数据安全地保存到指定的进度文件中。
 
     Args:
         progress_file (Path): 进度文件的路径。
         all_processed_images (set): 包含所有已成功处理的图片名称的集合。
+        stats_to_save (dict): 需要保存的累计统计数据。
     """
+    # 为了能被JSON序列化，需要将set转换为list
+    if isinstance(stats_to_save.get('missing'), set):
+        stats_to_save['missing'] = list(stats_to_save['missing'])
+
+    progress_data = {
+        'processed_images': list(all_processed_images),
+        'stats': stats_to_save
+    }
     try:
-        # 使用线程锁确保文件写入操作的原子性，防止在多线程或并发场景下出现问题。
         with progress_lock:
             with open(progress_file, 'w', encoding='utf-8') as f:
-                # 将集合转换为列表以便JSON序列化，并写入文件。
-                json.dump(list(all_processed_images), f, ensure_ascii=False, indent=2)
+                json.dump(progress_data, f, ensure_ascii=False, indent=2)
         logging.info(f"进度已成功保存至 {progress_file}。当前总计已处理 {len(all_processed_images)} 个项目。")
     except IOError as e:
         logging.error(f"进度文件 {progress_file} 写入失败: {e}")
@@ -375,11 +410,11 @@ def process_single_row(row_tuple, class_mapping, image_cache, error_log_path):
             
 def main():
     # 定义一个在退出前强制保存进度的函数
-    def final_save(data_split, processed_set, new_set):
+    def final_save(data_split, processed_set, new_set, stats_to_save):
         progress_file = get_progress_file_path(data_split)
         if new_set:
             all_processed = processed_set.union(new_set)
-            save_progress(progress_file, all_processed)
+            save_progress(progress_file, all_processed, stats_to_save)
             logging.info(f"在退出前，为'{data_split}'强制保存了 {len(all_processed)} 条进度。")
 
     """
@@ -406,7 +441,13 @@ def main():
     logging.info(f"已加载类别映射: {class_mapping}")
 
     # 初始化一个字典来存储和跟踪处理过程中的统计数据。
-    stats = {
+    # 这个stats将只包含本次运行的数据，用于累加到从进度文件中加载的历史数据中。
+    current_run_stats = {
+        'train': {'success': 0, 'missing': set(), 'error': 0, 'time': 0},
+        'val': {'success': 0, 'missing': set(), 'error': 0, 'time': 0}
+    }
+    # 这个字典将持有每个数据集的总统计信息（包括历史和当前）
+    total_stats = {
         'train': {'success': 0, 'missing': set(), 'error': 0, 'total': 0, 'time': 0},
         'val': {'success': 0, 'missing': set(), 'error': 0, 'total': 0, 'time': 0}
     }
@@ -437,27 +478,34 @@ def main():
             # --- 4. 进度管理与断点续传 ---
             # 首先确定进度文件路径
             progress_file = get_progress_file_path(data_split)
+            # 加载或初始化进度
+            processed_images_set, historical_stats = load_progress(progress_file)
+
             # 进度管理：检查是否存在旧进度，并让用户选择是否继续。
-            if progress_file.exists() and progress_file.stat().st_size > 0:
-                # 弹出对话框询问用户
+            if processed_images_set:
                 user_choice = messagebox.askyesno(
                     title="发现旧进度",
-                    message=f"检测到 '{data_split}' 数据集存在未完成的进度。\n\n是否要继续上次的任务？\n\n- 选择【是】将从上次中断的地方继续。\n- 选择【否】将开始一个全新的任务，并清空旧进度。"
+                    message=f"检测到 '{data_split}' 数据集存在未完成的进度（已处理 {len(processed_images_set)} 项）。\n\n是否要继续上次的任务？\n\n- 选择【是】将从上次中断的地方继续。\n- 选择【否】将开始一个全新的任务，并清空旧进度。"
                 )
                 if not user_choice:
-                    logging.info("用户选择开始新任务，正在初始化进度文件...")
-                    with open(progress_file, 'w', encoding='utf-8') as f:
-                        json.dump([], f)
+                    logging.info("用户选择开始新任务，正在清空旧进度...")
+                    processed_images_set.clear()
+                    historical_stats = {'success': 0, 'missing': set(), 'error': 0, 'time': 0} # 重置统计
+                    # 清空进度文件
+                    save_progress(progress_file, set(), historical_stats)
             
             df_labels = pd.read_excel(excel_path)
-            stats[data_split]['total'] = len(df_labels)
+            total_items_in_excel = len(df_labels)
+            total_stats[data_split]['total'] = total_items_in_excel # 记录总条目数
+            # 将历史统计数据加载到总统计中
+            total_stats[data_split].update(historical_stats)
+
             image_base_dir = DATA_ROOT / data_split / 'images'
             if not image_base_dir.exists():
                 logging.error(f"图片根目录不存在，跳过: {image_base_dir}")
                 continue
 
             image_cache = build_image_cache(image_base_dir)
-            processed_images_set = load_progress(progress_file)
             
             if '图片名称' not in df_labels.columns:
                 logging.error(f"Excel文件 {excel_path} 中缺少 '图片名称' 列，跳过此文件。")
@@ -467,10 +515,11 @@ def main():
             total_to_process = len(df_filtered)
 
             if total_to_process == 0:
-                logging.info(f"'{data_split}' 数据集中的所有图片均已处理。")
+                logging.info(f"'{data_split}' 数据集中的所有图片均已处理。总计 {total_stats[data_split]['total']} 项。")
                 continue
             
-            logging.info(f"发现 {total_to_process} 个新项目，开始处理...")
+            logging.info(f"数据集 '{data_split}' 总共有 {total_items_in_excel} 个项目，其中 {len(processed_images_set)} 个已处理。")
+            logging.info(f"本次需要处理 {total_to_process} 个新项目，开始处理...")
             split_start_time = time.time()
 
             # --- 5. 并行处理 ---
@@ -487,60 +536,81 @@ def main():
                 save_interval_count = 100
                 
                 results_iterator = executor.map(process_func, tasks)
-                for i, result in enumerate(tqdm(results_iterator, total=total_to_process, desc=f"处理 {data_split} 数据集", unit="项"), 1):
+                
+                # --- 优化tqdm进度条 ---
+                progress_bar = tqdm(results_iterator, 
+                                    total=total_items_in_excel,  # 总数是Excel中的总行数
+                                    initial=len(processed_images_set), # 初始值是已处理的数量
+                                    desc=f"处理 {data_split} 数据集", 
+                                    unit="项")
+
+                for i, result in enumerate(progress_bar, 1):
                     if result['success']:
-                        stats[data_split]['success'] += 1
+                        current_run_stats[data_split]['success'] += 1
                         newly_processed_images.add(result['image_name'])
                     elif result['missing']:
-                        stats[data_split]['missing'].add(result['missing'])
+                        current_run_stats[data_split]['missing'].add(result['missing'])
                     else:
-                        stats[data_split]['error'] += 1
+                        current_run_stats[data_split]['error'] += 1
 
                     if i % save_interval_count == 0 and newly_processed_images:
                         all_processed_so_far = processed_images_set.union(newly_processed_images)
+                        # 更新总统计数据
+                        total_stats[data_split]['success'] += current_run_stats[data_split]['success']
+                        total_stats[data_split]['error'] += current_run_stats[data_split]['error']
+                        total_stats[data_split]['missing'].update(current_run_stats[data_split]['missing'])
                         # 保存进度
-                        save_progress(progress_file, all_processed_so_far)
-                        # 更新基准集合，这是确保进度正确累加的关键
+                        save_progress(progress_file, all_processed_so_far, total_stats[data_split])
+                        # 更新基准集合
                         processed_images_set = all_processed_so_far
-                        # 清空当前批次的集合，为下一批次做准备
+                        # 清空当前批次的集合和统计
                         newly_processed_images.clear()
-                        logging.info(f"进度已保存。已处理 {i}/{total_to_process} 项。")
+                        current_run_stats[data_split] = {'success': 0, 'missing': set(), 'error': 0, 'time': 0}
+                        logging.info(f"进度已保存。已处理 {len(all_processed_so_far)}/{total_items_in_excel} 项。")
             
-            stats[data_split]['time'] = time.time() - split_start_time
-
             # --- 循环结束后，最终保存一次以确保所有进度都被记录 ---
             if newly_processed_images:
                 all_processed_images = processed_images_set.union(newly_processed_images)
-                save_progress(progress_file, all_processed_images)
+                # 更新最终统计
+                total_stats[data_split]['success'] += current_run_stats[data_split]['success']
+                total_stats[data_split]['error'] += current_run_stats[data_split]['error']
+                total_stats[data_split]['missing'].update(current_run_stats[data_split]['missing'])
+                total_stats[data_split]['time'] += time.time() - split_start_time
+                save_progress(progress_file, all_processed_images, total_stats[data_split])
+            else:
+                # 如果没有新处理的，也更新一下总时间
+                total_stats[data_split]['time'] += time.time() - split_start_time
+                save_progress(progress_file, processed_images_set, total_stats[data_split])
 
         # --- 6. 生成最终统计报告 (移入try块内) ---
-        total_time = time.time() - total_start_time
-        total_success = stats['train']['success'] + stats['val']['success']
-        total_missing = len(stats['train']['missing'] | stats['val']['missing'])
-        total_error = stats['train']['error'] + stats['val']['error']
-        total_items = stats['train']['total'] + stats['val']['total']
+        overall_total_time = time.time() - total_start_time
+        final_total_success = total_stats['train']['success'] + total_stats['val']['success']
+        final_total_missing_set = total_stats['train']['missing'].union(total_stats['val']['missing'])
+        final_total_missing = len(final_total_missing_set)
+        final_total_error = total_stats['train']['error'] + total_stats['val']['error']
+        final_total_items = total_stats['train']['total'] + total_stats['val']['total']
 
         # 在控制台打印详细的报告
-        logging.info("\n" + "="*25 + " 数据处理统计报告 " + "="*25)
-        logging.info(f"总处理时间: {total_time:.2f}秒")
-        logging.info(f"总处理条目: {total_items}")
-        logging.info(f"  - 成功: {total_success}")
-        logging.info(f"  - 图片未找到 (共 {total_missing} 张): {total_missing}")
-        logging.info(f"  - 处理错误: {total_error}")
+        logging.info("\n" + "="*25 + " 最终数据处理统计报告 " + "="*25)
+        logging.info(f"总运行时间: {overall_total_time:.2f}秒 (包含所有续跑)")
+        logging.info(f"总处理条目: {final_total_items}")
+        logging.info(f"  - 累计成功: {final_total_success}")
+        logging.info(f"  - 累计图片未找到 (共 {final_total_missing} 张): {final_total_missing}")
+        logging.info(f"  - 累计处理错误: {final_total_error}")
 
         # 分别打印 train 和 val 的详细统计
         for split in ['train', 'val']:
-            if stats[split]['total'] > 0:
-                logging.info(f"\n--- {split.upper()} 数据集 ---")
-                logging.info(f"  处理耗时: {stats[split]['time']:.2f}秒")
-                logging.info(f"  总条目: {stats[split]['total']}")
-                logging.info(f"  成功: {stats[split]['success']}")
-                logging.info(f"  图片未找到: {len(stats[split]['missing'])}")
-                logging.info(f"  处理错误: {stats[split]['error']}")
+            if total_stats[split]['total'] > 0:
+                logging.info(f"\n--- {split.upper()} 数据集 --- ")
+                logging.info(f"  累计处理耗时: {total_stats[split]['time']:.2f}秒")
+                logging.info(f"  总条目: {total_stats[split]['total']}")
+                logging.info(f"  成功: {total_stats[split]['success']}")
+                logging.info(f"  图片未找到: {len(total_stats[split]['missing'])}")
+                logging.info(f"  处理错误: {total_stats[split]['error']}")
 
         all_missing_images = []
         for split in ['train', 'val']:
-            for img_name in stats[split]['missing']:
+            for img_name in total_stats[split]['missing']:
                 all_missing_images.append({'数据集': split, '未找到图片名称': img_name})
 
         if all_missing_images:
@@ -559,12 +629,12 @@ def main():
     except KeyboardInterrupt:
         logging.warning("\n检测到用户中断 (Ctrl+C)，正在尝试保存当前进度...")
         if current_data_split:
-            final_save(current_data_split, processed_images_set, newly_processed_images)
+            final_save(current_data_split, processed_images_set, newly_processed_images, total_stats[current_data_split])
         logging.info("进度已保存，程序即将退出。")
     except Exception as e:
         logging.error(f"发生意外错误: {e}", exc_info=True)
         if current_data_split:
-            final_save(current_data_split, processed_images_set, newly_processed_images)
+            final_save(current_data_split, processed_images_set, newly_processed_images, total_stats[current_data_split])
     finally:
         logging.info("\n数据准备流程结束。")
 
