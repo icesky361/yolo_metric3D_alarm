@@ -77,42 +77,42 @@ import csv
 # 创建一个线程锁，用于在多线程环境下安全地写入错误日志，防止数据竞争。
 progress_lock = threading.Lock()
 
-    # --- 1. 配置智能日志记录 ---
-    log_dir = Path(__file__).parent.parent / 'logs'
-    log_dir.mkdir(exist_ok=True)
+# --- 1. 配置智能日志记录 ---
+log_dir = Path(__file__).parent.parent / 'logs'
+log_dir.mkdir(exist_ok=True)
 
-    # 检查上一次的日志文件状态
-    today_str = datetime.now().strftime('%Y%m%d')
-    # 寻找昨天的或更早的日志文件，这里简化为查找最新的一个日志文件
-    log_files = sorted(log_dir.glob('excel_to_yolo_*.log'), key=os.path.getmtime, reverse=True)
-    if log_files:
-        last_log_file = log_files[0]
-        try:
-            with open(last_log_file, 'r', encoding='utf-8') as f:
-                # 读取最后几行来判断是否正常结束
-                lines = f.readlines()
-                last_lines = "".join(lines[-5:]) # 查看最后5行
-                if "数据准备流程结束" not in last_lines and not last_log_file.name.endswith('_con.log'):
-                    # 如果没有正常结束，并且没有被标记过，则重命名
-                    new_name = last_log_file.stem + '_con.log'
-                    new_path = last_log_file.with_name(new_name)
-                    shutil.move(last_log_file, new_path)
-                    print(f"检测到上次运行未正常结束，已将日志文件重命名为: {new_path.name}")
-        except Exception as e:
-            print(f"检查旧日志文件时出错: {e}")
+# 检查上一次的日志文件状态
+today_str = datetime.now().strftime('%Y%m%d')
+# 寻找昨天的或更早的日志文件，这里简化为查找最新的一个日志文件
+log_files = sorted(log_dir.glob('excel_to_yolo_*.log'), key=os.path.getmtime, reverse=True)
+if log_files:
+    last_log_file = log_files[0]
+    try:
+        with open(last_log_file, 'r', encoding='utf-8') as f:
+            # 读取最后几行来判断是否正常结束
+            lines = f.readlines()
+            last_lines = "".join(lines[-5:]) # 查看最后5行
+            if "数据准备流程结束" not in last_lines and not last_log_file.name.endswith('_con.log'):
+                # 如果没有正常结束，并且没有被标记过，则重命名
+                new_name = last_log_file.stem + '_con.log'
+                new_path = last_log_file.with_name(new_name)
+                shutil.move(last_log_file, new_path)
+                print(f"检测到上次运行未正常结束，已将日志文件重命名为: {new_path.name}")
+    except Exception as e:
+        print(f"检查旧日志文件时出错: {e}")
 
-    # 为本次运行创建新的日志文件
-    log_file_path = log_dir / f"excel_to_yolo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+# 为本次运行创建新的日志文件
+log_file_path = log_dir / f"excel_to_yolo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file_path, encoding='utf-8'),
-            logging.StreamHandler()
-        ]
-    )
-    logging.info(f"日志文件已保存至: {log_file_path}")
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file_path, encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logging.info(f"日志文件已保存至: {log_file_path}")
 
 def select_excel_file(title="请选择Excel标注文件"):
     """
