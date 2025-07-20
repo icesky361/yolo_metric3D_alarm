@@ -412,25 +412,30 @@ def main():
     }
     total_start_time = time.time()  # 记录整个流程的开始时间
 
-    # --- 2. 循环处理数据集（训练集和验证集） ---
+    # --- 2. 一次性选择所有Excel文件 ---
+    excel_paths = {}
+    for data_split in ['train', 'val']:
+        path = select_excel_file(title=f"请为【{data_split}】数据集选择Excel标注文件 (可跳过)")
+        if path:
+            excel_paths[data_split] = path
+            logging.info(f"已为 '{data_split}' 数据集选择Excel文件: {path}")
+        else:
+            logging.warning(f"用户未为 '{data_split}' 数据集选择Excel文件，将跳过处理。")
+
+    # --- 3. 循环处理数据集（训练集和验证集） ---
     current_data_split = None
     processed_images_set = set()
     newly_processed_images = set()
 
     try:
-        for data_split in ['train', 'val']:
+        for data_split, excel_path in excel_paths.items():
             current_data_split = data_split
             processed_images_set = set() # 为每个数据集重置
             newly_processed_images = set() # 为每个数据集重置
-            logging.info(f"\n----- 正在处理 '{data_split}' 数据集 -----")
-            # 弹出文件选择框让用户选择Excel文件
-            excel_path = select_excel_file(title=f"请为【{data_split}】数据集选择Excel标注文件")
-            if not excel_path:
-                logging.warning(f"未给 '{data_split}' 数据集选择Excel文件，跳过。")
-                continue
+            logging.info(f"\n----- 正在处理 '{data_split}' 数据集 ----- (文件: {excel_path})")
 
-        # --- 3. 进度管理与断点续传 ---
-        # 首先确定进度文件路径
+            # --- 4. 进度管理与断点续传 ---
+            # 首先确定进度文件路径
             progress_file = get_progress_file_path(data_split)
             # 进度管理：检查是否存在旧进度，并让用户选择是否继续。
             if progress_file.exists() and progress_file.stat().st_size > 0:
@@ -468,7 +473,7 @@ def main():
             logging.info(f"发现 {total_to_process} 个新项目，开始处理...")
             split_start_time = time.time()
 
-            # --- 4. 并行处理 ---
+            # --- 5. 并行处理 ---
             # 初始化该数据集的错误日志文件，并写入表头
             error_log_path = log_dir / f'{data_split}_error_records.csv'
             with open(error_log_path, 'w', encoding='utf-8', newline='') as f:
