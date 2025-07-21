@@ -53,6 +53,7 @@ from pathlib import Path
 import logging
 import tempfile  # 添加tempfile模块导入
 from ultralytics import YOLO
+from pathlib import Path
 
 # 将项目根目录添加到系统路径中，以便能够正确导入 'utils' 模块
 # Path(__file__).resolve() 获取当前文件的绝对路径
@@ -104,7 +105,11 @@ def train(config_path: str):
     
     # 动态调整数据集配置，指定标签路径与图像路径相同
     data_config = config
-    
+    train_data_path = Path(config['path']) / config['train']
+    val_data_path = Path(config['path']) / config['val']   # 验证路径存在性
+    if not train_data_path.exists():
+        logging.error(f"训练数据路径不存在: {train_data_path.resolve()}")
+        return
     # --- 2. 设置环境并动态调整配置 ---
     # 这一步会根据检测到的硬件（CPU/GPU）动态设置设备和调整超参数（如批量大小）。
     device, updated_config = get_device_and_adjust_config(config)
@@ -131,7 +136,7 @@ def train(config_path: str):
         # 注意: ultralytics的验证器默认会计算mAP和分割mAP(IoU)。
         # 如果需要计算Dice系数等其他指标，可以考虑使用回调函数在验证结束时进行计算。
         results = model.train(
-            data=config_path,  # 直接传递配置文件路径，YOLO会自动解析
+            data=str(train_data_path),  # 传递拼接后的绝对路径，YOLO会自动解析
             epochs=updated_config['epochs'],
             batch=updated_config['batch'],
             imgsz=updated_config['imgsz'],
