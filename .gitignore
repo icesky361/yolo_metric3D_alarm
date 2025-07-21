@@ -48,13 +48,13 @@ Yolo_seg_Alarm/gemini/reports/
 # 忽略进度文件目录
 /Yolo_seg_Alarm/gemini/data_preparation/progress/
 /Yolo_seg_Alarm/gemini/data_preparation/progress/*
+args.yaml
 *.bmp
 *.gif
 *.bmp
 *.psd
 # 文本文件
 *.txt
-/Yolo_seg_Alarm/gemini/data_preparation/progress/
 # 不忽略requirements.txt
 !requirements.txt
 # 数据目录

@@ -51,7 +51,9 @@ import argparse
 import yaml
 from pathlib import Path
 import logging
+import tempfile  # 添加tempfile模块导入
 from ultralytics import YOLO
+from pathlib import Path
 
 # 将项目根目录添加到系统路径中，以便能够正确导入 'utils' 模块
 # Path(__file__).resolve() 获取当前文件的绝对路径
@@ -61,7 +63,26 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 from utils.environment import get_device_and_adjust_config
 
 # 配置日志记录，用于在控制台输出格式化的时间、日志级别和消息
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+import os
+from datetime import datetime
+
+# 创建日志目录
+log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'logs')
+os.makedirs(log_dir, exist_ok=True)
+
+# 生成带日期的日志文件名
+log_filename = f"data_prep_{datetime.now().strftime('%Y%m%d')}.log"
+log_filepath = os.path.join(log_dir, log_filename)
+
+# 配置日志同时输出到控制台和文件
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_filepath),
+        logging.StreamHandler()
+    ]
+)
 
 def train(config_path: str):
     """
@@ -84,7 +105,11 @@ def train(config_path: str):
     
     # 动态调整数据集配置，指定标签路径与图像路径相同
     data_config = config
-    
+    train_data_path = Path(config['path']) / config['train']
+    val_data_path = Path(config['path']) / config['val']   # 验证路径存在性
+    if not train_data_path.exists():
+        logging.error(f"训练数据路径不存在: {train_data_path.resolve()}")
+        return
     # --- 2. 设置环境并动态调整配置 ---
     # 这一步会根据检测到的硬件（CPU/GPU）动态设置设备和调整超参数（如批量大小）。
     device, updated_config = get_device_and_adjust_config(config)
@@ -111,7 +136,7 @@ def train(config_path: str):
         # 注意: ultralytics的验证器默认会计算mAP和分割mAP(IoU)。
         # 如果需要计算Dice系数等其他指标，可以考虑使用回调函数在验证结束时进行计算。
         results = model.train(
-            data=config_path,  # 直接传递配置文件路径，YOLO会自动解析
+            data=str(train_data_path),  # 传递拼接后的绝对路径，YOLO会自动解析
             epochs=updated_config['epochs'],
             batch=updated_config['batch'],
             imgsz=updated_config['imgsz'],
@@ -166,24 +191,125 @@ if __name__ == '__main__':
 
     # 使用解析到的配置路径调用train函数
     # 准备数据集配置
-    data_dict = {
-        'path': config['path'],
-        'train': config['train'],
-        'val': config['val'],
-        'nc': config['nc'],
-        'names': config['names']
-    }
+    # 修复路径大小写问题并确保正确指向标签目录
+    # 构建并验证数据集路径
+    # 直接使用包含图片和标签的目录（同一文件夹）
+    train_labels_path = os.path.abspath(os.path.join(config['path'], config['train']))
+    val_labels_path = os.path.abspath(os.path.join(config['path'], config['val']))
     
-    # 创建临时YAML文件以适应YOLO的数据加载要求
+    # 递归查找所有图像文件并生成文件列表
+    def get_image_paths(directory):
+        image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.gif']
+        image_paths = []
+        for root, _, files in os.walk(directory):
+            for file in files:
+                if any(file.lower().endswith(ext) for ext in image_extensions):
+                    # 检查对应标签文件是否存在（同一目录下同名.txt文件）
+                    label_path = os.path.splitext(os.path.join(root, file))[0] + '.txt'
+                    if os.path.exists(label_path) and os.path.getsize(label_path) > 0:
+                        image_paths.append(os.path.join(root, file))
+                    else:
+                        logging.warning(f"跳过无标签图像: {os.path.join(root, file)}")
+        return image_paths
+    
+    # 获取数据集根目录
+    root_data_path = Path(config['path']).resolve()
+    
+    # 获取训练和验证集路径
+    train_labels_path = root_data_path / config['train']
+    val_labels_path = root_data_path / config['val']
+    
+    # 验证路径存在性
+    if not train_labels_path.exists():
+        logging.error(f"训练数据路径不存在: {train_labels_path}")
+        return
+    if not val_labels_path.exists():
+        logging.error(f"验证数据路径不存在: {val_labels_path}")
+        return
+    
+    # 获取图像相对路径
+    train_images = [str(Path(path).relative_to(root_data_path)).replace('\\', '/') 
+                   for path in get_image_paths(train_labels_path)]
+    val_images = [str(Path(path).relative_to(root_data_path)).replace('\\', '/') 
+                 for path in get_image_paths(val_labels_path)]
+    
+    # 记录有效图像数量和样本路径
+    logging.info(f"找到 {len(train_images)} 个训练图像和标签对")
+    logging.info(f"找到 {len(val_images)} 个验证图像和标签对")
+    if train_images:
+        logging.info(f"训练样本示例: {train_images[:3]}")
+        # 验证第一个训练标签文件内容
+        first_train_label = os.path.splitext(train_images[0])[0] + '.txt'
+        first_train_label_path = os.path.join(root_data_path, first_train_label)
+        if os.path.exists(first_train_label_path):
+            with open(first_train_label_path, 'r') as f:
+                label_sample = f.read(200)  # 读取前200字符
+            logging.info(f"第一个训练标签内容示例: {label_sample}")
+        else:
+            logging.error(f"第一个训练标签文件不存在: {first_train_label_path}")
+    if val_images:
+        logging.info(f"验证样本示例: {val_images[:3]}")
+    
+    # 记录数据集根路径
+    logging.info(f"数据集根路径: {root_data_path}")
+    
+    # 导入tempfile模块
     import tempfile
-    import yaml
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-        yaml.dump(data_dict, f)
-        temp_yaml_path = f.name
-
-    # 开始训练
-    model.train(data=temp_yaml_path, epochs=config['epochs'], batch=config['batch'], imgsz=config['img_size'], workers=0)
     
-    # 清理临时文件
-    import os
-    os.remove(temp_yaml_path)
+    # 创建临时文件列表
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as train_f, \
+             tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as val_f:
+            
+            train_txt = train_f.name
+            val_txt = val_f.name
+            
+            # 写入图像路径
+            train_f.write('\n'.join(train_images))
+            val_f.write('\n'.join(val_images))
+        
+        # 更新数据配置
+        data_dict = {
+            'path': str(root_data_path),
+            'train': train_txt,
+            'val': val_txt,
+            'nc': config['nc'],
+            'names': config['names'],
+            'label_dir': ''  # 标签与图像同目录
+        }
+        
+        # 创建临时YAML文件
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            yaml.dump(data_dict, f)
+            temp_yaml_path = f.name
+        
+        # 记录调试信息
+        logging.info(f"训练样本数量: {len(train_images)}")
+        logging.info(f"验证样本数量: {len(val_images)}")
+        if train_images:
+            logging.info(f"训练样本示例: {train_images[:3]}")
+        if val_images:
+            logging.info(f"验证样本示例: {val_images[:3]}")
+        
+        # 开始训练
+        model.train(data=temp_yaml_path, 
+                   epochs=config['epochs'], 
+                   batch=config['batch'], 
+                   imgsz=config['img_size'])
+        
+    finally:
+        # 确保清理临时文件
+        for file_path in [train_txt, val_txt, temp_yaml_path]:
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                logging.warning(f"删除临时文件失败: {file_path}, 错误: {e}")
+    
+    # 添加异常捕获以确保日志完整记录
+try:
+    model.train(data=temp_yaml_path, epochs=config['epochs'], batch=config['batch'], imgsz=config['img_size'], workers=0)
+except Exception as e:
+    logging.error(f"训练过程中发生致命错误: {str(e)}", exc_info=True)
+    raise  # 重新抛出异常以便终端显示
+    

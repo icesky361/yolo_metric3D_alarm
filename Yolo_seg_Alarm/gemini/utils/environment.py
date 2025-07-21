@@ -74,47 +74,47 @@ def get_device_and_adjust_config(config: dict) -> (torch.device, dict):
             # 2GB及以下显存（如MX350）
             config['weights'] = 'yolov8n-seg.pt'  # 使用nano模型
             config['batch'] = 1
-            logging.info(f"检测到低端GPU (显存{gpu_memory:.1f}GB)，使用YOLOv11-nano模型和batch_size={config['batch']}")
+            logging.info(f"检测到低端GPU (显存{gpu_memory:.1f}GB)，使用{config['weights']}模型和batch_size={config['batch']}")
         elif gpu_memory <= 4:
             # 2GB到4GB显存
             config['weights'] = 'yolov8s-seg.pt'  # 使用small模型
             config['batch'] = 8
-            logging.info(f"检测到中端GPU (显存{gpu_memory:.1f}GB)，使用YOLOv11-small模型和batch_size={config['batch']}")
+            logging.info(f"检测到中端GPU (显存{gpu_memory:.1f}GB)，使用{config['weights']}模型和batch_size={config['batch']}")
         elif gpu_memory <= 8:
             # 4GB到8GB显存
             config['weights'] = 'yolov8m-seg.pt'  # 使用medium模型
             config['batch'] = 16
-            logging.info(f"检测到中高端GPU (显存{gpu_memory:.1f}GB)，使用YOLOv11-medium模型和batch_size={config['batch']}")
+            logging.info(f"检测到中高端GPU (显存{gpu_memory:.1f}GB)，使用{config['weights']}模型和batch_size={config['batch']}")
         else:
             # 8GB以上显存
             config['weights'] = 'yolov8l-seg.pt'  # 使用large模型
             config['batch'] = 32
-            logging.info(f"检测到高端GPU (显存{gpu_memory:.1f}GB)，使用YOLOv11-large模型和batch_size={config['batch']}")
+            logging.info(f"检测到高端GPU (显存{gpu_memory:.1f}GB)，使用{config['weights']}模型和batch_size={config['batch']}")
         # --- 根据GPU型号动态调整参数 --- #
         # 针对特定显卡型号的优化配置
         if 'MX350' in gpu_name:
             # MX350特殊处理：仅支持YOLOv8-nano
             config['weights'] = 'yolov8n-seg.pt'
             config['batch'] = 1
-            logging.info("检测到MX350显卡，强制使用YOLOv8-nano模型和batch_size=1")
+            logging.info("检测到MX350显卡，强制使用{config['weights']}模型和batch_size=1")
         elif 'A4500' in gpu_name:
             # A4500高端显卡：使用YOLOv11-large
             config['weights'] = 'yolo11l-seg.pt'
             config['batch'] = 64  # 20GB显存优化配置
-            logging.info("检测到A4500显卡，使用YOLOv11-large模型和batch_size=64")
+            logging.info("检测到A4500显卡，使用{config['weights']}模型和batch_size=64")
         elif 'RTX 40' in gpu_name or 'RTX 30' in gpu_name:
             # 其他高端GPU：使用YOLOv11-large
             config['weights'] = 'yolov11l-seg.pt'
             config['batch'] = 32
-            logging.info("检测到高端GPU，使用YOLOv11-large模型和batch_size=32")
+            logging.info("检测到高端GPU，使用{config['weights']}模型和batch_size=32")
         elif 'GTX 16' in gpu_name or 'RTX 20' in gpu_name:
             # 中端GPU：保持YOLOv8-small
             config['batch'] = 16
-            logging.info("检测到中端GPU，使用YOLOv8-small模型和batch_size=16")
+            logging.info("检测到中端GPU，使用{config['weights']}模型和batch_size=16")
         else:
             # 低端或未知GPU：保持保守配置
             config['batch'] = 1
-            logging.info("检测到低端或未知GPU，使用YOLOv8-nano模型和batch_size=1")
+            logging.info("检测到低端或未知GPU，使用{config['weights']}模型和batch_size=1")
     else:
         # 如果没有可用的GPU，则使用CPU
         device = torch.device("cpu")
