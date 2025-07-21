@@ -30,7 +30,11 @@ def main():
     # 加载配置
     config_path = Path(__file__).parent.parent / 'configs' / 'yolov11_seg.yaml'
     config = load_config(config_path)
-    
+    # 动态计算数据集路径
+    # 从train2.py位置计算项目根目录
+    project_root = Path(__file__).resolve().parents[2]  # 向上三级到Yolo_metric_alarm
+    data_path = project_root / 'Data' / 'raw'
+    config['path'] = str(data_path)
     # 根据硬件调整配置
     device, config = get_device_and_adjust_config(config)
     
