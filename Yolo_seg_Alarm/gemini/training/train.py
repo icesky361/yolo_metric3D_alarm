@@ -204,55 +204,34 @@ if __name__ == '__main__':
         for root, _, files in os.walk(directory):
             for file in files:
                 if any(file.lower().endswith(ext) for ext in image_extensions):
-                    # 检查对应标签文件是否存在
+                    # 检查对应标签文件是否存在（同一目录下同名.txt文件）
                     label_path = os.path.splitext(os.path.join(root, file))[0] + '.txt'
-                    if os.path.exists(label_path):
-                        # 检查标签文件是否非空且包含有效内容
-                        if os.path.getsize(label_path) > 0:
-                            with open(label_path, 'r') as f:
-                                label_content = f.read().strip()
-                            if label_content:
-                                # 验证标签文件格式
-                                valid = True
-                                for line_num, line in enumerate(label_content.split('\n')):
-                                    line = line.strip()
-                                    if not line:  # 跳过空行
-                                        continue
-                                    parts = line.split()
-                                    if len(parts) < 5:
-                                        logging.warning(f"标签文件格式错误 {label_path} (行 {line_num+1}): 至少需要5个值")
-                                        valid = False
-                                        break
-                                    try:
-                                        # 验证类别ID和边界框坐标
-                                        cls_id = int(parts[0])
-                                        coords = list(map(float, parts[1:5]))
-                                        if not all(0 <= c <= 1 for c in coords):
-                                            logging.warning(f"标签文件坐标错误 {label_path} (行 {line_num+1}): 坐标应在0-1范围内")
-                                            valid = False
-                                            break
-                                    except ValueError:
-                                        logging.warning(f"标签文件数值错误 {label_path} (行 {line_num+1}): {line}")
-                                        valid = False
-                                        break
-                                if valid:
-                                    image_paths.append(os.path.join(root, file))
-                                else:
-                                    logging.warning(f"跳过格式错误的标签文件: {label_path}")
-                            else:
-                                logging.warning(f"跳过空白标签文件: {label_path}")
-                        else:
-                            logging.warning(f"跳过空标签文件: {label_path}")
+                    if os.path.exists(label_path) and os.path.getsize(label_path) > 0:
+                        image_paths.append(os.path.join(root, file))
                     else:
                         logging.warning(f"跳过无标签图像: {os.path.join(root, file)}")
         return image_paths
     
     # 获取数据集根目录
-    root_data_path = config['path']
+    root_data_path = Path(config['path']).resolve()
     
-    # 获取训练和验证集图像的相对路径
-    train_images = [os.path.relpath(path, root_data_path) for path in get_image_paths(train_labels_path)]
-    val_images = [os.path.relpath(path, root_data_path) for path in get_image_paths(val_labels_path)]
+    # 获取训练和验证集路径
+    train_labels_path = root_data_path / config['train']
+    val_labels_path = root_data_path / config['val']
+    
+    # 验证路径存在性
+    if not train_labels_path.exists():
+        logging.error(f"训练数据路径不存在: {train_labels_path}")
+        return
+    if not val_labels_path.exists():
+        logging.error(f"验证数据路径不存在: {val_labels_path}")
+        return
+    
+    # 获取图像相对路径
+    train_images = [str(Path(path).relative_to(root_data_path)).replace('\\', '/') 
+                   for path in get_image_paths(train_labels_path)]
+    val_images = [str(Path(path).relative_to(root_data_path)).replace('\\', '/') 
+                 for path in get_image_paths(val_labels_path)]
     
     # 记录有效图像数量和样本路径
     logging.info(f"找到 {len(train_images)} 个训练图像和标签对")
@@ -278,38 +257,55 @@ if __name__ == '__main__':
     import tempfile
     
     # 创建临时文件列表
-    train_txt = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False).name
-    val_txt = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False).name
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as train_f, \
+             tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as val_f:
+            
+            train_txt = train_f.name
+            val_txt = val_f.name
+            
+            # 写入图像路径
+            train_f.write('\n'.join(train_images))
+            val_f.write('\n'.join(val_images))
+        
+        # 更新数据配置
+        data_dict = {
+            'path': str(root_data_path),
+            'train': train_txt,
+            'val': val_txt,
+            'nc': config['nc'],
+            'names': config['names'],
+            'label_dir': ''  # 标签与图像同目录
+        }
+        
+        # 创建临时YAML文件
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            yaml.dump(data_dict, f)
+            temp_yaml_path = f.name
+        
+        # 记录调试信息
+        logging.info(f"训练样本数量: {len(train_images)}")
+        logging.info(f"验证样本数量: {len(val_images)}")
+        if train_images:
+            logging.info(f"训练样本示例: {train_images[:3]}")
+        if val_images:
+            logging.info(f"验证样本示例: {val_images[:3]}")
+        
+        # 开始训练
+        model.train(data=temp_yaml_path, 
+                   epochs=config['epochs'], 
+                   batch=config['batch'], 
+                   imgsz=config['img_size'])
+        
+    finally:
+        # 确保清理临时文件
+        for file_path in [train_txt, val_txt, temp_yaml_path]:
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                logging.warning(f"删除临时文件失败: {file_path}, 错误: {e}")
     
-    # 验证临时文件路径
-    logging.info(f"训练文件列表路径: {train_txt}")
-    logging.info(f"验证文件列表路径: {val_txt}")
-    
-    # 写入图像路径
-    # 将Windows路径分隔符替换为正斜杠以兼容YOLO
-    with open(train_txt, 'w') as f:
-        f.write('\n'.join([path.replace('\\', '/') for path in train_images]))
-    with open(val_txt, 'w') as f:
-        f.write('\n'.join([path.replace('\\', '/') for path in val_images]))
-    
-    # 更新数据配置使用文件列表
-    data_dict = {
-          'path': config['path'],
-          'train': train_txt,
-          'val': val_txt,
-          'label_dir': 'images',  # 指定标签文件与图像在同一目录
-        'nc': config['nc'],
-        'names': config['names']
-    }
-    
-    # 创建临时YAML文件以适应YOLO的数据加载要求
-    import tempfile
-    import yaml
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-        yaml.dump(data_dict, f)
-        temp_yaml_path = f.name
-
-    # 开始训练
     # 添加异常捕获以确保日志完整记录
 try:
     model.train(data=temp_yaml_path, epochs=config['epochs'], batch=config['batch'], imgsz=config['img_size'], workers=0)
@@ -317,8 +313,3 @@ except Exception as e:
     logging.error(f"训练过程中发生致命错误: {str(e)}", exc_info=True)
     raise  # 重新抛出异常以便终端显示
     
-    # 清理所有临时文件
-    import os
-    os.remove(temp_yaml_path)
-    os.remove(train_txt)
-    os.remove(val_txt)
