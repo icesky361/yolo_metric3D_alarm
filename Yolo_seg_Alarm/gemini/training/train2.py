@@ -45,8 +45,8 @@ def main():
     config['val'] = val_path
     
     # 加载模型
-    model = YOLO(config['weights'])
-    
+    model_path = Path(config['model_path']) / config['weights']
+    model = YOLO(str(model_path))
     # 训练模型
     results = model.train(
         data=config_path,
