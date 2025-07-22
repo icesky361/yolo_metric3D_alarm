@@ -24,8 +24,8 @@
 # 例如: 如果 train 指向 '../Data/raw/train/images'，
 #       对于图片 '.../images/摄像头1/img1.jpg'，框架会查找 '.../images/摄像头1/img1.txt'。
 
-path: Path(__file__)
-model_path: ../models/
+path: G:/soft/soft/python project/Yolo_metric_alarm/Data/raw
+model_path: G:\soft\soft\python project\Yolo_metric_alarm\Yolo_seg_Alarm\gemini\models
 epochs: 100
 batch_size: 16
 img_size: 640

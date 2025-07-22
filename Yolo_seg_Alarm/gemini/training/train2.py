@@ -18,12 +18,13 @@ def prepare_data_paths(config):
     base_path = Path(config['path'])
     train_path = base_path / 'train' / 'images'
     val_path = base_path / 'val' / 'images'
-    
+    print(f"最终训练集路径: {train_path}")
+    print(f"最终验证集路径: {val_path}")
     # 检查路径是否存在
     if not train_path.exists() or not val_path.exists():
         raise FileNotFoundError(f"数据集路径不存在: {train_path} 或 {val_path}")
     
-    return str(train_path), str(val_path)
+    return train_path, val_path
 
 # 主训练函数
 def main():
@@ -32,7 +33,7 @@ def main():
     config = load_config(config_path)
     # 动态计算数据集路径
     # 从train2.py位置计算项目根目录
-    project_root = Path(__file__).resolve().parents[2]  # 向上三级到Yolo_metric_alarm
+    project_root = Path(__file__).resolve().parents[3]  # 向上三级到Yolo_metric_alarm
     data_path = project_root / 'Data' / 'raw'
     config['path'] = str(data_path)
     # 根据硬件调整配置
