@@ -4,6 +4,7 @@ from pathlib import Path
 from ultralytics import YOLO
 import os
 import sys
+import argparse
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from utils.environment import get_device_and_adjust_config
 
@@ -68,6 +69,14 @@ def main():
     train_path, val_path = prepare_data_paths(config)
     config['train'] = train_path
     config['val'] = val_path
+    
+    # 解析命令行参数
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--task', type=str, default='detect', help='任务类型')
+    args = parser.parse_args()
+    
+    # 在模型加载代码前强制设置任务类型
+    args.task = 'detect'
     
     # 加载模型
     model_path = Path(config['model_path']) / config['weights']
