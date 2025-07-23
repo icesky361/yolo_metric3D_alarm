@@ -80,9 +80,11 @@ def main():
     
     # 加载模型
     model_path = Path(config['model_path']) / config['weights']
-    model = YOLO(str(model_path))
+    # 显式指定检测任务类型加载模型
+model = YOLO(str(model_path), task='detect')
     # 训练模型
-    results = model.train(
+    # 强制指定任务类型为检测
+results = model.train(task=args.task,
         data=config_path,
         epochs=config['epochs'],
         batch=config['batch'],
