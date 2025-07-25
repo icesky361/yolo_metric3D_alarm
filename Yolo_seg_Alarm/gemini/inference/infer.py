@@ -69,6 +69,7 @@ from tqdm import tqdm
 import torch
 import cv2
 import numpy as np
+from PIL import Image
 
 # 配置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -99,6 +100,8 @@ def run_inference(weights_path: str, source_dir: str, excel_path: str):
     # 定义输出Excel文件的路径，并确保其父目录存在
     output_excel_path = Path('results') / f"output_{Path(excel_path).name}"
     output_excel_path.parent.mkdir(exist_ok=True)
+    output_images_path = Path('results') / 'images'
+    output_images_path.mkdir(exist_ok=True)
 
     # --- 2. 加载模型 ---
     try:
@@ -171,6 +174,13 @@ def run_inference(weights_path: str, source_dir: str, excel_path: str):
                     results_data['confidence'].append(round(confidence, 4))
                     results_data['bbox_xyxy'].append(",".join(map(str, bbox_coords)))
                     results_data['segmentation_xy'].append(seg_str)
+            # 生成并保存标注图像
+            annotated_image = results[0].plot()
+            # 获取文件名和扩展名，添加_tl后缀
+            filename = img_path.stem
+            extension = img_path.suffix
+            new_filename = f"{filename}_tl{extension}"
+            Image.fromarray(annotated_image).save(output_images_path / new_filename)
 
         except Exception as e:
             logging.error(f"处理图片 {img_path.name} 时发生错误: {e}", exc_info=True)
