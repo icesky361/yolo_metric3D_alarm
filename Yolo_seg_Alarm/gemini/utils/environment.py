@@ -99,7 +99,7 @@ def get_device_and_adjust_config(config: dict) -> (torch.device, dict):
             logging.info("检测到MX350显卡，强制使用{config['weights']}模型和batch_size={config['batch']}")
         elif 'A4500' in gpu_name:
             # A4500高端显卡：使用YOLOv11-large
-            config['weights'] = 'yolo11l-seg.pt'
+            config['weights'] = 'yolo11l.pt'
             config['batch'] = 32  # 20GB显存优化配置
             logging.info("检测到A4500显卡，使用{config['weights']}模型和batch_size={config['batch']}")
         elif 'RTX 40' in gpu_name or 'RTX 30' in gpu_name:

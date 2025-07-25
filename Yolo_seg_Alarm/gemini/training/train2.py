@@ -5,6 +5,10 @@ from ultralytics import YOLO
 import os
 import sys
 import argparse
+import sys
+# 强制添加命令行参数确保任务类型为检测
+if '--task' not in sys.argv:
+    sys.argv.extend(['--task', 'detect'])
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from utils.environment import get_device_and_adjust_config
 
@@ -81,10 +85,10 @@ def main():
     # 加载模型
     model_path = Path(config['model_path']) / config['weights']
     # 显式指定检测任务类型加载模型
-model = YOLO(str(model_path), task='detect')
+    model = YOLO(str(model_path), task='detect')
     # 训练模型
     # 强制指定任务类型为检测
-results = model.train(task=args.task,
+    results = model.train(task=args.task,
         data=config_path,
         epochs=config['epochs'],
         batch=config['batch'],
