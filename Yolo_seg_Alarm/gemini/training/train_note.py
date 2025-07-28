@@ -87,7 +87,7 @@ def main():
     train_params = {
         'task': args.task,
         'data': str(temp_yaml_path),  # 传递YAML文件路径
-        'epochs': 100,  # 训练轮次
+        'epochs': 10,  # 训练轮次
         'batch': 8,     # 批次大小，根据显存调整
         'imgsz': 640,   # 图像大小
         'project': 'yolo_seg_alarm',
@@ -105,19 +105,38 @@ def main():
         # 自动选择设备
         train_params['device'] = '0' if torch.cuda.is_available() else 'cpu'
     
-    print(f"使用设备: {train_params['device']}")
-    print(f"开始训练，参数: {train_params}")
+    # 设置训练参数
+    train_params = {
+        'task': 'detect',
+        'data': temp_yaml_path,
+        'epochs': 5,
+        'batch': config['batch'],
+        'imgsz': 640,
+        'project': 'yolo_seg_alarm',
+        'name': 'train_note_results',
+        'exist_ok': True,
+        'device': device,
+        'verbose': False,
+        'save_period': 1,
+        'amp': False  # 禁用AMP，避免下载yolo11n.pt
+    }
     
+    # 添加环境变量以跳过AMP检查
+    import os
+    os.environ['YOLO_TESTS_RUNNING'] = '1'
+
+    # 开始训练
+    print(f"使用设备: {device}")
+    print(f"开始训练，参数: {train_params}")
+    results = model.train(**train_params)
+    
+    # 保存训练后的模型
     try:
-        # 训练模型
-        results = model.train(**train_params)
-        
-        # 保存训练后的模型
-        model.save('yolo_seg_alarm_train_note.pt')
-        print("训练完成，模型已保存为 yolo_seg_alarm_train_note.pt")
+        # 这里应该是保存模型的代码
+        model.save('trained_model.pt')
     finally:
-        # 清理临时YAML文件
-        if temp_yaml_path.exists():
+        # 清理临时文件
+        if os.path.exists(temp_yaml_path):
             os.remove(temp_yaml_path)
             print(f"已删除临时配置文件: {temp_yaml_path}")
 
