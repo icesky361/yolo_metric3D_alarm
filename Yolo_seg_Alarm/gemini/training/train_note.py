@@ -71,53 +71,58 @@ def main():
     model.overrides['model'] = str(model_path)
     
     # 创建临时数据配置YAML文件
-    temp_yaml_path = Path('temp_data_config.yaml')
-    data_config = {
-        'train': str(train_path),
-        'val': str(val_path),
-        'nc': 5,
-        'names': {
-            0: '挖掘机',
-            1: '打桩机',
-            2: '拉管机',
-            3: '烟雾',
-            4: '火'
-        },
-               
+temp_yaml_path = Path('temp_data_config.yaml')
+
+# 定义数据集路径
+# 修正路径，确保指向正确的数据集目录
+train_path = Path('datasets/train')
+val_path = Path('datasets/val')
+
+# 确保中文正常显示
+class MyDumper(yaml.SafeDumper):
+    def represent_dict_preserve_order(self, data):
+        return self.represent_dict(data.items())
+
+data_config = {
+    'train': str(train_path),
+    'val': str(val_path),
+    'nc': 5,
+    'names': {
+        0: '挖掘机',
+        1: '打桩机',
+        2: '拉管机',
+        3: '烟雾',
+        4: '火'
     }
+}
+
+# 写入YAML文件
+with open(temp_yaml_path, 'w', encoding='utf-8') as f:
+    yaml.dump(data_config, f, Dumper=MyDumper, allow_unicode=True)
     
-    # 写入YAML文件
-    with open(temp_yaml_path, 'w', encoding='utf-8') as f:
-        yaml.dump(data_config, f)
+    # 处理设备配置
+    device = '0' if torch.cuda.is_available() else 'cpu'
+    batch_size = 8  # 默认批次大小
+    epochs = 10  # 默认训练轮次
+    
+    if has_env_utils:
+        # 尝试使用环境工具获取设备和调整配置
+        config = {'device': 'auto', 'batch': batch_size, 'epochs': epochs}
+        device, config = get_device_and_adjust_config(config)
+        batch_size = config['batch']
+        epochs = config['epochs']
+    
+    # 检测到低端GPU，强制减小批次大小
+    if gpu_memory < 4.0:
+        config['batch'] = 1
+        print(f"检测到低端GPU (显存{gpu_memory}GB)，使用{config['weights']}模型和batch_size={config['batch']}")
     
     # 配置训练参数
     train_params = {
-        'task': args.task,
-        'data': str(temp_yaml_path),  # 传递YAML文件路径
-        'epochs': 10,  # 训练轮次
-        'batch': 8,     # 批次大小，根据显存调整
-        'imgsz': 640,   # 图像大小
-        'project': 'yolo_seg_alarm',
-        'name': 'train_note_results',
-        'exist_ok': True
-    }
-    
-    # 处理设备配置
-    if has_env_utils:
-        # 尝试使用环境工具获取设备
-        config = {'device': 'auto'}
-        device, config = get_device_and_adjust_config(config)
-        train_params['device'] = device.type
-    else:
-        # 自动选择设备
-        train_params['device'] = '0' if torch.cuda.is_available() else 'cpu'
-    
-    # 设置训练参数
-    train_params = {
         'task': 'detect',
-        'data': temp_yaml_path,
-        'epochs': 5,
-        'batch': config['batch'],
+        'data': str(temp_yaml_path),  # 传递YAML文件路径
+        'epochs': epochs,
+        'batch': batch_size,
         'imgsz': 640,
         'project': 'yolo_seg_alarm',
         'name': 'train_note_results',
@@ -128,24 +133,33 @@ def main():
         'amp': False  # 禁用AMP，避免下载yolo11n.pt
     }
     
+    # 确保device是字符串类型
+    if hasattr(device, 'type'):
+        device_str = device.type
+    else:
+        device_str = str(device)
+    train_params['device'] = device_str
+
     # 添加环境变量以跳过AMP检查
-    import os
     os.environ['YOLO_TESTS_RUNNING'] = '1'
 
+    # 加载YOLO模型
+    from ultralytics import YOLO
+    model = YOLO('yolov8n-seg.pt')
+
     # 开始训练
-    print(f"使用设备: {device}")
+    print(f"使用设备: {device_str}")
     print(f"开始训练，参数: {train_params}")
     results = model.train(**train_params)
     
     # 保存训练后的模型
-    try:
-        # 这里应该是保存模型的代码
-        model.save('trained_model.pt')
-    finally:
-        # 清理临时文件
-        if os.path.exists(temp_yaml_path):
-            os.remove(temp_yaml_path)
-            print(f"已删除临时配置文件: {temp_yaml_path}")
+    model.save('trained_model.pt')
+    print("模型已保存为: trained_model.pt")
+    
+    # 清理临时文件
+    if temp_yaml_path.exists():
+        temp_yaml_path.unlink()
+        print(f"已删除临时配置文件: {temp_yaml_path}")
 
 if __name__ == '__main__':
     main()
