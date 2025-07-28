@@ -57,6 +57,9 @@ args.yaml
 *.txt
 # 不忽略requirements.txt
 !requirements.txt
+!requirements_high.txt
+!requirements_low.txt
+!requirements_metric3Dv2.txt
 # 数据目录
 Data/
 
