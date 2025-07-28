@@ -75,8 +75,15 @@ def main():
     data_config = {
         'train': str(train_path),
         'val': str(val_path),
-        'nc': 1,  # 类别数，根据实际情况修改
-        'names': ['object']  # 类别名称，根据实际情况修改
+        'nc': 5,
+        'names': {
+            0: '挖掘机',
+            1: '打桩机',
+            2: '拉管机',
+            3: '烟雾',
+            4: '火'
+        },
+               
     }
     
     # 写入YAML文件
