@@ -61,23 +61,34 @@ def main():
         # 尝试绝对路径
         model_path = Path(r'D:\program\python\PythonProject\Yolo_seg_Alarm\models\yolov8n.pt')
         if not model_path.exists():
-            raise FileNotFoundError(f"模型文件不存在: models\\yolov8n.pt")
+            raise FileNotFoundError(f"模型文件不存在: {model_path}")
     
     print(f"加载模型: {model_path}")
-    # 显式指定检测任务类型加载模型
-    model = YOLO(str(model_path), task='detect')
+    # 显式指定检测任务类型加载模型，并禁用自动下载
+    model = YOLO(str(model_path), task='detect', verbose=False)
+    
+    # 确保使用本地模型，不自动下载
+    model.overrides['model'] = str(model_path)
+    
+    # 创建临时数据配置YAML文件
+    temp_yaml_path = Path('temp_data_config.yaml')
+    data_config = {
+        'train': str(train_path),
+        'val': str(val_path),
+        'nc': 1,  # 类别数，根据实际情况修改
+        'names': ['object']  # 类别名称，根据实际情况修改
+    }
+    
+    # 写入YAML文件
+    with open(temp_yaml_path, 'w', encoding='utf-8') as f:
+        yaml.dump(data_config, f)
     
     # 配置训练参数
     train_params = {
         'task': args.task,
-        'data': {
-            'train': str(train_path),
-            'val': str(val_path),
-            'nc': 1,  # 默认类别数，根据实际情况修改
-            'names': ['object']  # 默认类别名称，根据实际情况修改
-        },
+        'data': str(temp_yaml_path),  # 传递YAML文件路径
         'epochs': 100,  # 训练轮次
-        'batch': 8,     # 批次大小
+        'batch': 8,     # 批次大小，根据显存调整
         'imgsz': 640,   # 图像大小
         'project': 'yolo_seg_alarm',
         'name': 'train_note_results',
@@ -97,12 +108,18 @@ def main():
     print(f"使用设备: {train_params['device']}")
     print(f"开始训练，参数: {train_params}")
     
-    # 训练模型
-    results = model.train(**train_params)
-    
-    # 保存训练后的模型
-    model.save('yolo_seg_alarm_train_note.pt')
-    print("训练完成，模型已保存为 yolo_seg_alarm_train_note.pt")
+    try:
+        # 训练模型
+        results = model.train(**train_params)
+        
+        # 保存训练后的模型
+        model.save('yolo_seg_alarm_train_note.pt')
+        print("训练完成，模型已保存为 yolo_seg_alarm_train_note.pt")
+    finally:
+        # 清理临时YAML文件
+        if temp_yaml_path.exists():
+            os.remove(temp_yaml_path)
+            print(f"已删除临时配置文件: {temp_yaml_path}")
 
 if __name__ == '__main__':
     main()
