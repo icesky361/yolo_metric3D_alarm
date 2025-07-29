@@ -2,7 +2,7 @@
 """
 ================================================================================
 @ 脚本名: infer.py
-@ 功能: YOLOv11 实例分割模型推理脚本
+@ 功能: YOLOv11 目标检测模型推理脚本
 @ 作者: TraeAI
 @ 创建时间: 2024-07-28
 --------------------------------------------------------------------------------
@@ -38,7 +38,7 @@
             - 类别名称 (`pred_class`)
             - 置信度 (`confidence`)
             - 边界框坐标 (`bbox_xyxy`)
-            - 实例分割掩码的多边形坐标 (`segmentation_xy`)
+        
         - 将提取的信息存入`results_data`字典。
     - **g. 结果整合与保存**: 
         - 将收集到的`results_data`字典转换为Pandas DataFrame。
@@ -56,7 +56,7 @@
 
 @ 使用方法:
 -   在命令行中运行此脚本，并提供必要的参数:
-    python inference/infer.py --weights models/yolo_seg_experiment/weights/best.pt --source Data/test --excel_file Data/test/your_excel_file.xlsx
+    python inference/infer.py --weights "G:/soft/soft/python project/Yolo_metric_alarm/Yolo_seg_Alarm/gemini/yolo_seg_alarm/train2_results/weights/best.pt" --source "G:/soft/soft/python project/Yolo_metric_alarm/Data/test" --excel_file Data/test/your_excel_file.xlsx
 ================================================================================
 """
 
@@ -105,24 +105,39 @@ def run_inference(weights_path: str, source_dir: str, excel_path: str):
 
     # --- 2. 加载模型 ---
     try:
-        model = YOLO(weights_path) # 从指定的权重文件加载模型
-        model.to(device) # 将模型移动到检测到的设备上
-        model.eval()  # 设置为评估模式，减少内存使用并提高推理速度
+        # 极简推理模式配置 (Ultralytics官方推荐标准)
+        # 1. 仅在模型初始化时指定检测任务
+        # 根据train2.py中的工作配置，仅指定检测任务
+        # 双重保障：初始化时指定任务 + 加载后强制设置
+        model = YOLO(weights_path, task='detect') # 初始化指定检测任务 (移除不支持的mode参数)
+        model.to(device)  # 移动到目标设备
+        model.eval()      # 启用PyTorch评估模式
+        # 兼容旧版本: 显式设置推理模式
+        if hasattr(model, 'mode'):
+            model.mode = 'predict'
+        # 验证推理配置
+        assert model.task == 'detect', f'模型任务错误: 预期detect，实际{model.task}'
+        assert hasattr(model, 'predict'), '模型没有predict方法'
+        logging.info(f'模型已加载至{device}，推理模式确认完成')
+        # 确保使用predict方法进行推理，显式指定任务类型
         logging.info(f"成功从 {weights_path} 加载模型")
     except Exception as e:
         logging.error(f"加载模型失败。错误: {e}")
         return
 
-    # --- 3. 加载Excel数据 ---
+    # --- 3. 加载或创建Excel数据 ---
     try:
-        df = pd.read_excel(excel_path)
-        logging.info(f"成功从 {excel_path} 加载Excel文件")
-    except FileNotFoundError:
-        logging.error(f"Excel文件未找到: {excel_path}")
-        return
+        if not Path(excel_path).exists():
+            # 创建新的Excel文件并添加表头
+            df = pd.DataFrame(columns=['image_name', 'pred_class', 'confidence', 'bbox_xyxy'])
+            df.to_excel(excel_path, index=False)
+            logging.info(f"已创建新Excel文件: {excel_path}")
+        else:
+            df = pd.read_excel(excel_path, engine='openpyxl')
+            logging.info(f"成功从 {excel_path} 加载Excel文件")
     except Exception as e:
-        logging.error(f"读取Excel文件时出错: {e}")
-        return
+    logging.error(f'处理Excel文件时出错: {str(e)}. 请确保已安装openpyxl库 (pip install openpyxl)')
+    return
 
     # --- 4. 准备用于存储结果的数据结构 ---
     # 使用列表来收集数据比直接向DataFrame中追加行更高效
@@ -130,8 +145,7 @@ def run_inference(weights_path: str, source_dir: str, excel_path: str):
         'image_name': [],
         'pred_class': [],
         'confidence': [],
-        'bbox_xyxy': [],
-        'segmentation_xy': []
+          'bbox_xyxy': []
     }
 
     # --- 5. 对所有图像进行推理 ---
@@ -143,7 +157,10 @@ def run_inference(weights_path: str, source_dir: str, excel_path: str):
         try:
             # model.predict方法处理所有事情：图像预处理、推理、后处理
             with torch.no_grad():  # 禁用梯度计算，减少内存占用
-                results = model.predict(source=str(img_path), device=device)
+                # 推理前最终确认模式
+                 model.mode = 'predict'
+                 logger.info(f'推理前模型模式: {model.mode}')
+                 results = model.predict(source=str(img_path), device=device, task='detect', verbose=False) # 禁用详细输出，确保推理模式
 
             # 处理单张图片的所有检测结果
             for res in results:
@@ -160,14 +177,6 @@ def run_inference(weights_path: str, source_dir: str, excel_path: str):
                     confidence = float(box.conf) # 置信度
                     bbox_coords = box.xyxy[0].cpu().numpy().astype(int).tolist() # 边界框坐标 [x1, y1, x2, y2]
                     
-                    # 获取当前对象的分割掩码坐标
-                    if res.masks is not None and len(res.masks.xy) > i:
-                        seg_coords = res.masks.xy[i].astype(int).tolist() # 分割多边形坐标 [[x1,y1],[x2,y2],...]
-                        # 将坐标展平并用逗号连接成字符串
-                        seg_str = ",".join(map(str, np.array(seg_coords).flatten()))
-                    else:
-                        seg_str = "N/A" # 如果没有分割信息
-
                     # 将结果添加到数据容器中
                     results_data['image_name'].append(img_path.name)
                     results_data['pred_class'].append(names[class_id])
@@ -204,7 +213,7 @@ def run_inference(weights_path: str, source_dir: str, excel_path: str):
         'pred_class': lambda x: '; '.join(x),
         'confidence': lambda x: '; '.join(map(str, x)),
         'bbox_xyxy': lambda x: '; '.join(x),
-        'segmentation_xy': lambda x: '; '.join(x)
+
     }
     results_agg_df = results_df.groupby('图片名称').agg(agg_functions).reset_index()
 
@@ -213,7 +222,7 @@ def run_inference(weights_path: str, source_dir: str, excel_path: str):
     final_df = pd.merge(df, results_agg_df, on='图片名称', how='left')
 
     # 为没有检测到目标的图片填充'No Detection'
-    final_df[['pred_class', 'confidence', 'bbox_xyxy', 'segmentation_xy']] = final_df[['pred_class', 'confidence', 'bbox_xyxy', 'segmentation_xy']].fillna('No Detection')
+    final_df[['pred_class', 'confidence', 'bbox_xyxy']] = final_df[['pred_class', 'confidence', 'bbox_xyxy']].fillna('No Detection')
 
     try:
         final_df.to_excel(output_excel_path, index=False)
@@ -224,9 +233,14 @@ def run_inference(weights_path: str, source_dir: str, excel_path: str):
 if __name__ == '__main__':
     # --- 命令行参数解析 ---
     parser = argparse.ArgumentParser(description="运行YOLOv11分割模型推理。")
-    parser.add_argument('--weights', type=str, required=True, help='训练好的.pt模型文件的路径。')
-    parser.add_argument('--source', type=str, required=True, help='源目录的路径 (例如, ../Data/test)。')
-    parser.add_argument('--excel_file', type=str, required=True, help='对应的Excel文件的路径。')
+    # 默认路径配置（根据项目结构自动设置）
+    default_weights = 'G:/soft/soft/python project/Yolo_metric_alarm/Yolo_seg_Alarm/gemini/yolo_seg_alarm/train2_results/weights/best.pt'
+    default_source = 'G:/soft/soft/python project/Yolo_metric_alarm/Data/test'
+    default_excel = 'G:/soft/soft/python project/Yolo_metric_alarm/Data/test/your_excel_file.xlsx'
+    
+    parser.add_argument('--weights', type=str, default=default_weights, help='模型权重文件路径 (默认: %(default)s)')
+    parser.add_argument('--source', type=str, default=default_source, help='测试图片所在文件夹路径 (默认: %(default)s)')
+    parser.add_argument('--excel_file', type=str, default=default_excel, help='原始Excel文件路径 (默认: %(default)s)')
 
     args = parser.parse_args()
 
