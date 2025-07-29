@@ -180,21 +180,49 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
     logger.info(f'推理前模型模式: {model.mode}')
     
     try:
-        # 将所有图像路径转换为字符串列表
-        image_paths = [str(img_path) for img_path in image_files]
-        
-        # 一次性对所有图像进行批量推理
-        with torch.no_grad():  # 禁用梯度计算，减少内存占用
-            logger.info(f'开始批量推理 {len(image_paths)} 张图像，批量大小: 64')
-            results = model.predict(source=image_paths, device=device, task='detect', batch=64, half=True, verbose=False)
+        # 渐进式批量推理 - 将图像分成多个较小的批次
+        batch_size = 32# 根据RTX A4500 20GB显存调整的批量大小
+        total_batches = (len(image_files) + batch_size - 1) // batch_size
+        logger.info(f'开始渐进式批量推理，共 {len(image_files)} 张图像，每批 {batch_size} 张，总批次: {total_batches}')
 
         # 处理批量推理结果（添加进度条）
         import time
         start_time = time.time()
+        results = []
+
+        # 预热模型，减少首次推理开销
+        if len(image_files) > 0:
+            warmup_img = str(image_files[0])
+            with torch.no_grad():
+                model.predict(source=warmup_img, device=device, task='detect', batch=1, half=True, verbose=False)
+            logger.info('模型预热完成')
+
+        # 分批次处理图像
+        for batch_idx in range(total_batches):
+            start_idx = batch_idx * batch_size
+            end_idx = min(start_idx + batch_size, len(image_files))
+            batch_files = image_files[start_idx:end_idx]
+            batch_paths = [str(img_path) for img_path in batch_files]
+
+            # 记录批次开始时间
+            batch_start_time = time.time()
+
+            # 对当前批次进行推理
+            with torch.no_grad():
+                logger.info(f'处理批次 {batch_idx+1}/{total_batches}，共 {len(batch_paths)} 张图像')
+                batch_results = model.predict(source=batch_paths, device=device, task='detect', batch=batch_size, half=True, verbose=False)
+                results.extend(batch_results)
+
+            # 记录批次结束时间
+            batch_elapsed = time.time() - batch_start_time
+            logger.info(f'批次 {batch_idx+1}/{total_batches} 处理完成，耗时 {batch_elapsed:.2f} 秒，每秒处理 {len(batch_paths)/batch_elapsed:.2f} 张图像')
+
+        # 处理所有推理结果
+        logger.info(f'所有批次推理完成，开始处理结果')
         for i, res in enumerate(tqdm(results, desc="正在处理推理结果")):
             img_path = image_files[i]
             # 每处理50张图像更新一次进度时间信息
-            if i % 50 == 0 and i > 0:
+            if i % 100 == 0 and i > 0:
                 elapsed = time.time() - start_time
                 remaining = (elapsed / i) * (len(results) - i)
                 logger.info(f"已处理 {i}/{len(results)} 张图像，耗时 {elapsed:.2f} 秒，预计剩余 {remaining:.2f} 秒")
