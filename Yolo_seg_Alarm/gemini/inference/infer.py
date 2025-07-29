@@ -179,35 +179,35 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
     model.mode = 'predict'
     logger.info(f'推理前模型模式: {model.mode}')
     
-    # 使用tqdm创建进度条
-    for img_path in tqdm(image_files, desc="正在进行推理"):
-        try:
-            # 确保文件存在
-            if not img_path.exists():
-                logger.error(f"文件不存在: {img_path}")
-                continue
+    try:
+        # 将所有图像路径转换为字符串列表
+        image_paths = [str(img_path) for img_path in image_files]
+        
+        # 一次性对所有图像进行批量推理
+        with torch.no_grad():  # 禁用梯度计算，减少内存占用
+            logger.info(f'开始批量推理 {len(image_paths)} 张图像，批量大小: 64')
+            results = model.predict(source=image_paths, device=device, task='detect', batch=64, half=True, verbose=False)
+
+        # 处理批量推理结果（添加进度条）
+        import time
+        start_time = time.time()
+        for i, res in enumerate(tqdm(results, desc="正在处理推理结果")):
+            img_path = image_files[i]
+            # 每处理50张图像更新一次进度时间信息
+            if i % 50 == 0 and i > 0:
+                elapsed = time.time() - start_time
+                remaining = (elapsed / i) * (len(results) - i)
+                logger.info(f"已处理 {i}/{len(results)} 张图像，耗时 {elapsed:.2f} 秒，预计剩余 {remaining:.2f} 秒")
             
-            # model.predict方法处理所有事情：图像预处理、推理、后处理
-            with torch.no_grad():  # 禁用梯度计算，减少内存占用
-                # 降低日志级别为DEBUG，避免大量冗余输出
-                logger.debug(f'正在处理图像: {img_path.name}')
-                results = model.predict(source=str(img_path), device=device, task='detect', batch=64, half=True, verbose=False)
-
-            # 处理单张图片的所有检测结果
-            for res in results:
-                # 如果没有检测到任何边界框或掩码，则跳过
-                if res.masks is None and res.boxes is None:
-                    continue
-
-                # 从模型结果中获取类别名称
-                names = res.names
+            # 从模型结果中获取类别名称
+            names = res.names
 
             # 读取原始图像，保持色彩信息
             original_image = Image.open(img_path).convert('RGB')
             original_array = np.array(original_image)
 
             # 生成标注图像
-            annotated_image = results[0].plot(img=original_array)
+            annotated_image = res.plot(img=original_array)
 
             # 获取文件名和扩展名，添加_tl后缀
             filename = img_path.stem
@@ -218,9 +218,9 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             Image.fromarray(annotated_image).save(output_images_path / new_filename)
 
             # 检查是否有检测到的边界框
-            if len(res.boxes) > 0:
+            if res.boxes is not None and len(res.boxes) > 0:
                 # 遍历每个检测到的边界框
-                for i, box in enumerate(res.boxes):
+                for box in res.boxes:
                     class_id = int(box.cls) # 类别ID
                     confidence = float(box.conf) # 置信度
                     bbox_coords = box.xyxy[0].cpu().numpy().astype(int).tolist() # 边界框坐标 [x1, y1, x2, y2]
@@ -239,9 +239,9 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 results_data['confidence'].append(0.0)
                 results_data['bbox_xyxy'].append('')
 
-        except Exception as e:
-            logger.error(f"处理图片 {img_path.name} 时发生错误: {e}", exc_info=True)
-            torch.cuda.empty_cache()  # 清理GPU内存，防止内存溢出
+    except Exception as e:
+        logger.error(f"批量推理过程中发生错误: {e}", exc_info=True)
+        torch.cuda.empty_cache()  # 清理GPU内存，防止内存溢出
 
     # --- 6. 将结果保存到Excel ---
     if not results_data['original_image_name']:
