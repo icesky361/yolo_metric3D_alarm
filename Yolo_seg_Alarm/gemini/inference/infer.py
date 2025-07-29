@@ -199,6 +199,16 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 # 从模型结果中获取类别名称
                 names = res.names
 
+            # 生成并保存标注图像
+            annotated_image = results[0].plot()
+            # 获取文件名和扩展名，添加_tl后缀
+            filename = img_path.stem
+            extension = img_path.suffix
+            new_filename = f"{filename}_tl{extension}"
+            Image.fromarray(annotated_image).save(output_images_path / new_filename)
+
+            # 检查是否有检测到的边界框
+            if len(res.boxes) > 0:
                 # 遍历每个检测到的边界框
                 for i, box in enumerate(res.boxes):
                     class_id = int(box.cls) # 类别ID
@@ -211,13 +221,13 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                     results_data['pred_class'].append(names[class_id])
                     results_data['confidence'].append(round(confidence, 4))
                     results_data['bbox_xyxy'].append(",".join(map(str, bbox_coords)))
-            # 生成并保存标注图像
-            annotated_image = results[0].plot()
-            # 获取文件名和扩展名，添加_tl后缀
-            filename = img_path.stem
-            extension = img_path.suffix
-            new_filename = f"{filename}_tl{extension}"
-            Image.fromarray(annotated_image).save(output_images_path / new_filename)
+            else:
+                # 如果没有检测到边界框，也添加一条记录，但填充空值
+                results_data['original_image_name'].append(img_path.name)
+                results_data['annotated_image_name'].append(new_filename)
+                results_data['pred_class'].append('未检测到')
+                results_data['confidence'].append(0.0)
+                results_data['bbox_xyxy'].append('')
 
         except Exception as e:
             logger.error(f"处理图片 {img_path.name} 时发生错误: {e}", exc_info=True)
