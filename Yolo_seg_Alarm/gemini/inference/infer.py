@@ -191,7 +191,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             with torch.no_grad():  # 禁用梯度计算，减少内存占用
                 # 降低日志级别为DEBUG，避免大量冗余输出
                 logger.debug(f'正在处理图像: {img_path.name}')
-                results = model.predict(source=str(img_path), device=device, task='detect', batch=64,half=True, verbose=False)
+                results = model.predict(source=str(img_path), device=device, task='detect', batch=64, half=True, verbose=False)
 
             # 处理单张图片的所有检测结果
             for res in results:
