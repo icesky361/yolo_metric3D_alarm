@@ -158,22 +158,35 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
     }
 
     # --- 5. 对所有图像进行推理（包括子文件夹） ---
-    image_files = list(source_path.rglob('*.*')) # 获取所有图片文件（包括子文件夹）
-    logging.info(f"找到 {len(image_files)} 张图片待处理（包括子文件夹）。")
+    # 定义有效的图像文件扩展名
+    valid_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
+    # 只获取有效的图像文件
+    image_files = [
+        file for file in source_path.rglob('*.*') 
+        if file.suffix.lower() in valid_extensions and file.is_file()
+    ]
+    
+    logger.info(f"找到 {len(image_files)} 张有效图像文件待处理（包括子文件夹）。")
     if len(image_files) == 0:
-        logging.warning(f"在路径 {source_path} 及其子文件夹中未找到任何图片文件。")
-        logging.warning("请确保该路径包含图片文件，或使用 --source 参数指定包含图片的目录。")
+        logger.warning(f"在路径 {source_path} 及其子文件夹中未找到任何有效图像文件。")
+        logger.warning("请确保该路径包含图像文件（.jpg, .jpeg, .png, .bmp等），或使用 --source 参数指定包含图像的目录。")
         return
 
     # 使用tqdm创建进度条
     for img_path in tqdm(image_files, desc="正在进行推理"):
         try:
+            # 确保文件存在
+            if not img_path.exists():
+                logger.error(f"文件不存在: {img_path}")
+                continue
+            
             # model.predict方法处理所有事情：图像预处理、推理、后处理
             with torch.no_grad():  # 禁用梯度计算，减少内存占用
                 # 推理前最终确认模式
-                 model.mode = 'predict'
-                 logger.info(f'推理前模型模式: {model.mode}')
-                 results = model.predict(source=str(img_path), device=device, task='detect', verbose=False) # 禁用详细输出，确保推理模式
+                model.mode = 'predict'
+                logger.info(f'推理前模型模式: {model.mode}')
+                logger.info(f'正在处理图像: {img_path.name}')
+                results = model.predict(source=str(img_path), device=device, task='detect', verbose=False) # 禁用详细输出，确保推理模式
 
             # 处理单张图片的所有检测结果
             for res in results:
