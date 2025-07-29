@@ -87,23 +87,27 @@ def get_device():
         logging.info("未找到支持CUDA的GPU。将在CPU上运行。")
     return device
 
-def run_inference(weights_path: str, source_dir: str, excel_path: str):
+def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
     """
     对一个目录中的图像进行推理，并将结果保存到Excel文件中。
 
     Args:
         weights_path (str): 训练好的模型权重（.pt文件）的路径。
         source_dir (str): 包含测试图像的目录的路径。
-        excel_path (str): 需要更新结果的Excel文件的路径。
+        output_excel_path (str): 保存结果的Excel文件的路径。
     """
     # --- 1. 初始化设置 ---
     device = get_device()
     source_path = Path(source_dir) / 'images' # 图片文件夹路径
-    # 定义输出Excel文件的路径，并确保其父目录存在
-    output_excel_path = Path('results') / f"output_{Path(excel_path).name}"
-    output_excel_path.parent.mkdir(exist_ok=True)
-    output_images_path = Path('results') / 'images'
+    # 确保输出目录存在
+    output_dir = Path('results')
+    output_dir.mkdir(exist_ok=True)
+    output_images_path = output_dir / 'images'
     output_images_path.mkdir(exist_ok=True)
+    # 设置输出Excel文件路径
+    output_excel_path = Path(output_excel_path)
+    # 确保输出Excel文件的父目录存在
+    output_excel_path.parent.mkdir(exist_ok=True)
 
     # --- 2. 加载模型 ---
     try:
@@ -139,15 +143,20 @@ def run_inference(weights_path: str, source_dir: str, excel_path: str):
     # --- 4. 准备用于存储结果的数据结构 ---
     # 使用列表来收集数据比直接向DataFrame中追加行更高效
     results_data = {
-        'image_name': [],
+        'original_image_name': [],
+        'annotated_image_name': [],
         'pred_class': [],
         'confidence': [],
-          'bbox_xyxy': []
+        'bbox_xyxy': []
     }
 
     # --- 5. 对所有图像进行推理（包括子文件夹） ---
     image_files = list(source_path.rglob('*.*')) # 获取所有图片文件（包括子文件夹）
     logging.info(f"找到 {len(image_files)} 张图片待处理（包括子文件夹）。")
+    if len(image_files) == 0:
+        logging.warning(f"在路径 {source_path} 及其子文件夹中未找到任何图片文件。")
+        logging.warning("请确保该路径包含图片文件，或使用 --source 参数指定包含图片的目录。")
+        return
 
     # 使用tqdm创建进度条
     for img_path in tqdm(image_files, desc="正在进行推理"):
@@ -180,7 +189,6 @@ def run_inference(weights_path: str, source_dir: str, excel_path: str):
                     results_data['pred_class'].append(names[class_id])
                     results_data['confidence'].append(round(confidence, 4))
                     results_data['bbox_xyxy'].append(",".join(map(str, bbox_coords)))
-                    results_data['segmentation_xy'].append(seg_str)
             # 生成并保存标注图像
             annotated_image = results[0].plot()
             # 获取文件名和扩展名，添加_tl后缀
@@ -194,7 +202,7 @@ def run_inference(weights_path: str, source_dir: str, excel_path: str):
             torch.cuda.empty_cache()  # 清理GPU内存，防止内存溢出
 
     # --- 6. 将结果保存到Excel ---
-    if not results_data['image_name']:
+    if not results_data['original_image_name']:
         logging.warning("在任何图片中都未检测到目标。")
         return
 
@@ -232,8 +240,8 @@ if __name__ == '__main__':
     
     parser.add_argument('--weights', type=str, default=default_weights, help='模型权重文件路径 (默认: %(default)s)')
     parser.add_argument('--source', type=str, default=default_source, help='测试图片所在文件夹路径 (默认: %(default)s)')
-    parser.add_argument('--excel_file', type=str, default=default_excel, help='原始Excel文件路径 (默认: %(default)s)')
+    parser.add_argument('--output_excel', type=str, default=default_excel, help='结果Excel文件路径 (默认: %(default)s)')
 
     args = parser.parse_args()
 
-    run_inference(args.weights, args.source, args.excel_file)
+    run_inference(args.weights, args.source, args.output_excel)
