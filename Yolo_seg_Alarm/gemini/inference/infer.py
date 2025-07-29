@@ -12,6 +12,8 @@
     - 配置日志记录器，用于输出推理过程中的信息。
 
 
+
+
 # 其他导入语句
 
 # 2.  **设备检测 (get_device)**: 
@@ -66,7 +68,6 @@
 import argparse
 import pandas as pd
 import openpyxl
-print(f"当前使用的openpyxl版本: {openpyxl.__version__}")
 from pathlib import Path
 from ultralytics import YOLO
 from tqdm import tqdm
@@ -75,6 +76,8 @@ import cv2
 import numpy as np
 from PIL import Image
 import logging
+import numpy as np
+from PIL import Image
 
 # 配置日志记录器
 logging.basicConfig(
@@ -188,7 +191,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             with torch.no_grad():  # 禁用梯度计算，减少内存占用
                 # 降低日志级别为DEBUG，避免大量冗余输出
                 logger.debug(f'正在处理图像: {img_path.name}')
-                results = model.predict(source=str(img_path), device=device, task='detect', verbose=False) # 禁用详细输出，确保推理模式
+                results = model.predict(source=str(img_path), device=device, task='detect', batch=64,half=True, verbose=False)
 
             # 处理单张图片的所有检测结果
             for res in results:
@@ -199,12 +202,19 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 # 从模型结果中获取类别名称
                 names = res.names
 
-            # 生成并保存标注图像
-            annotated_image = results[0].plot()
+            # 读取原始图像，保持色彩信息
+            original_image = Image.open(img_path).convert('RGB')
+            original_array = np.array(original_image)
+
+            # 生成标注图像
+            annotated_image = results[0].plot(img=original_array)
+
             # 获取文件名和扩展名，添加_tl后缀
             filename = img_path.stem
             extension = img_path.suffix
             new_filename = f"{filename}_tl{extension}"
+
+            # 保存标注图像
             Image.fromarray(annotated_image).save(output_images_path / new_filename)
 
             # 检查是否有检测到的边界框
