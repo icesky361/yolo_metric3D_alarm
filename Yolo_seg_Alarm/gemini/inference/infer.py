@@ -11,33 +11,36 @@
     - 导入所需库 (argparse, pandas, logging, ultralytics, torch等)。
     - 配置日志记录器，用于输出推理过程中的信息。
 
-2.  **设备检测 (`get_device`)**:
-    - 检查系统是否支持CUDA（即有无NVIDIA GPU）。
-    - 如果支持，则设置设备为`cuda:0`并打印GPU型号。
-    - 如果不支持，则设置设备为`cpu`，并提示用户将在CPU上运行。
 
-3.  **推理主函数 (`run_inference`)**:
-    - **a. 设置**: 
-        - 调用`get_device()`确定运行设备。
-        - 定义输入图片目录和输出Excel文件的路径。
-        - 自动创建`results`文件夹用于存放结果。
-    - **b. 加载模型**: 
-        - 使用`ultralytics.YOLO`加载用户指定的、已经训练好的模型权重（`.pt`文件）。
-        - 将模型移动到检测到的设备上（GPU或CPU）。
-    - **c. 加载原始Excel数据**: 
-        - 使用`pandas.read_excel`读取用户提供的原始Excel文件，该文件包含图片名称等信息。
-    - **d. 准备结果容器**: 
-        - 创建一个字典`results_data`，用于高效地收集每张图片的检测结果（类别、置信度、边界框、分割坐标）。
-    - **e. 遍历图片并执行推理**: 
-        - 遍历指定文件夹中的所有图片文件。
-        - 使用`tqdm`显示处理进度条。
-        - 对每张图片，调用`model.predict()`方法进行推理。
-        - `predict`方法会返回一个包含所有检测结果的列表。
-    - **f. 解析并保存结果**: 
-        - 遍历推理结果，提取每个检测到的对象的：
-            - 类别名称 (`pred_class`)
-            - 置信度 (`confidence`)
-            - 边界框坐标 (`bbox_xyxy`)
+# 其他导入语句
+
+# 2.  **设备检测 (get_device)**: 
+#    - 检查系统是否支持CUDA(即有无NVIDIA GPU)。
+#    - 如果支持，则设置设备为`cuda:0`并打印GPU型号。
+#    - 如果不支持，则设置设备为`cpu`，并提示用户将在CPU上运行。
+
+# 3.  **推理主函数 (run_inference)**: 
+#    - **a. 设置**: 
+#        - 调用`get_device()`确定运行设备。
+#        - 定义输入图片目录和输出Excel文件的路径。
+#        - 自动创建`results`文件夹用于存放结果。
+#    - **b. 加载模型**: 
+#        - 使用`ultralytics.YOLO`加载用户指定的、已经训练好的模型权重(.pt文件)。
+#        - 将模型移动到检测到的设备上（GPU或CPU）。
+#    - **c. 加载原始Excel数据**: 
+#        - 使用`pandas.read_excel`读取用户提供的原始Excel文件，该文件包含图片名称等信息。
+#    - **d. 准备结果容器**: 
+#        - 创建一个字典`results_data`，用于高效地收集每张图片的检测结果(类别、置信度、边界框、分割坐标)。
+#    - **e. 遍历图片并执行推理**: 
+#        - 遍历指定文件夹中的所有图片文件。
+#        - 使用`tqdm`显示处理进度条。
+#        - 对每张图片，调用`model.predict()`方法进行推理。
+#        - `predict`方法会返回一个包含所有检测结果的列表。
+#    - **f. 解析并保存结果**: 
+#        - 遍历推理结果，提取每个检测到的对象的：
+        - 类别名称 (`pred_class`)
+        - 置信度 (`confidence`)
+        - 边界框坐标 (`bbox_xyxy`)
         
         - 将提取的信息存入`results_data`字典。
     - **g. 结果整合与保存**: 
@@ -65,26 +68,30 @@ import pandas as pd
 import openpyxl
 print(f"当前使用的openpyxl版本: {openpyxl.__version__}")
 from pathlib import Path
-import logging
 from ultralytics import YOLO
 from tqdm import tqdm
 import torch
 import cv2
 import numpy as np
 from PIL import Image
+import logging
 
-# 配置日志记录
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
+# 配置日志记录器
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 def get_device():
     """检测可用的硬件（GPU/CPU）。"""
     if torch.cuda.is_available():
         device = torch.device("cuda:0")
         gpu_name = torch.cuda.get_device_name(0)
-        logging.info(f"检测到支持CUDA的GPU: {gpu_name}")
+        logger.info(f"检测到支持CUDA的GPU: {gpu_name}")
     else:
         device = torch.device("cpu")
-        logging.info("未找到支持CUDA的GPU。将在CPU上运行。")
+        logger.info("未找到支持CUDA的GPU。将在CPU上运行。")
     return device
 
 def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
@@ -124,20 +131,20 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
         # 验证推理配置
         assert model.task == 'detect', f'模型任务错误: 预期detect，实际{model.task}'
         assert hasattr(model, 'predict'), '模型没有predict方法'
-        logging.info(f'模型已加载至{device}，推理模式确认完成')
+        logger.info(f'模型已加载至{device}，推理模式确认完成')
         # 确保使用predict方法进行推理，显式指定任务类型
-        logging.info(f"成功从 {weights_path} 加载模型")
+        logger.info(f"成功从 {weights_path} 加载模型")
     except Exception as e:
-        logging.error(f"加载模型失败。错误: {e}")
+        logger.error(f"加载模型失败。错误: {e}")
         return
 
     # --- 3. 创建新的Excel文件用于存储结果 ---
     try:
         # 创建新的DataFrame用于存储结果
         df = pd.DataFrame(columns=['original_image_name', 'annotated_image_name', 'pred_class', 'confidence', 'bbox_xyxy'])
-        logging.info("已初始化结果数据结构")
+        logger.info("已初始化结果数据结构")
     except Exception as e:
-        logging.error(f'初始化数据结构时出错: {str(e)}')
+        logger.error(f'初始化数据结构时出错: {str(e)}')
         return
 
     # --- 4. 准备用于存储结果的数据结构 ---
@@ -198,12 +205,12 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             Image.fromarray(annotated_image).save(output_images_path / new_filename)
 
         except Exception as e:
-            logging.error(f"处理图片 {img_path.name} 时发生错误: {e}", exc_info=True)
+            logger.error(f"处理图片 {img_path.name} 时发生错误: {e}", exc_info=True)
             torch.cuda.empty_cache()  # 清理GPU内存，防止内存溢出
 
     # --- 6. 将结果保存到Excel ---
     if not results_data['original_image_name']:
-        logging.warning("在任何图片中都未检测到目标。")
+        logger.warning("在任何图片中都未检测到目标。")
         return
 
     # 从收集的结果创建一个新的DataFrame
