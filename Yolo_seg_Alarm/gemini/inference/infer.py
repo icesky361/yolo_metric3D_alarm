@@ -172,6 +172,10 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
         logger.warning("请确保该路径包含图像文件（.jpg, .jpeg, .png, .bmp等），或使用 --source 参数指定包含图像的目录。")
         return
 
+    # 设置模型模式并只记录一次
+    model.mode = 'predict'
+    logger.info(f'推理前模型模式: {model.mode}')
+    
     # 使用tqdm创建进度条
     for img_path in tqdm(image_files, desc="正在进行推理"):
         try:
@@ -182,10 +186,8 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             
             # model.predict方法处理所有事情：图像预处理、推理、后处理
             with torch.no_grad():  # 禁用梯度计算，减少内存占用
-                # 推理前最终确认模式
-                model.mode = 'predict'
-                logger.info(f'推理前模型模式: {model.mode}')
-                logger.info(f'正在处理图像: {img_path.name}')
+                # 降低日志级别为DEBUG，避免大量冗余输出
+                logger.debug(f'正在处理图像: {img_path.name}')
                 results = model.predict(source=str(img_path), device=device, task='detect', verbose=False) # 禁用详细输出，确保推理模式
 
             # 处理单张图片的所有检测结果
