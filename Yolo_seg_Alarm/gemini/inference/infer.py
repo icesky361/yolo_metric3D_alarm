@@ -62,6 +62,8 @@
 
 import argparse
 import pandas as pd
+import openpyxl
+print(f"当前使用的openpyxl版本: {openpyxl.__version__}")
 from pathlib import Path
 import logging
 from ultralytics import YOLO
@@ -125,19 +127,14 @@ def run_inference(weights_path: str, source_dir: str, excel_path: str):
         logging.error(f"加载模型失败。错误: {e}")
         return
 
-    # --- 3. 加载或创建Excel数据 ---
+    # --- 3. 创建新的Excel文件用于存储结果 ---
     try:
-        if not Path(excel_path).exists():
-            # 创建新的Excel文件并添加表头
-            df = pd.DataFrame(columns=['image_name', 'pred_class', 'confidence', 'bbox_xyxy'])
-            df.to_excel(excel_path, index=False)
-            logging.info(f"已创建新Excel文件: {excel_path}")
-        else:
-            df = pd.read_excel(excel_path, engine='openpyxl')
-            logging.info(f"成功从 {excel_path} 加载Excel文件")
+        # 创建新的DataFrame用于存储结果
+        df = pd.DataFrame(columns=['original_image_name', 'annotated_image_name', 'pred_class', 'confidence', 'bbox_xyxy'])
+        logging.info("已初始化结果数据结构")
     except Exception as e:
-    logging.error(f'处理Excel文件时出错: {str(e)}. 请确保已安装openpyxl库 (pip install openpyxl)')
-    return
+        logging.error(f'初始化数据结构时出错: {str(e)}')
+        return
 
     # --- 4. 准备用于存储结果的数据结构 ---
     # 使用列表来收集数据比直接向DataFrame中追加行更高效
@@ -148,9 +145,9 @@ def run_inference(weights_path: str, source_dir: str, excel_path: str):
           'bbox_xyxy': []
     }
 
-    # --- 5. 对所有图像进行推理 ---
-    image_files = list(source_path.glob('*.*')) # 获取所有图片文件
-    logging.info(f"找到 {len(image_files)} 张图片待处理。")
+    # --- 5. 对所有图像进行推理（包括子文件夹） ---
+    image_files = list(source_path.rglob('*.*')) # 获取所有图片文件（包括子文件夹）
+    logging.info(f"找到 {len(image_files)} 张图片待处理（包括子文件夹）。")
 
     # 使用tqdm创建进度条
     for img_path in tqdm(image_files, desc="正在进行推理"):
@@ -178,7 +175,8 @@ def run_inference(weights_path: str, source_dir: str, excel_path: str):
                     bbox_coords = box.xyxy[0].cpu().numpy().astype(int).tolist() # 边界框坐标 [x1, y1, x2, y2]
                     
                     # 将结果添加到数据容器中
-                    results_data['image_name'].append(img_path.name)
+                    results_data['original_image_name'].append(img_path.name)
+                    results_data['annotated_image_name'].append(new_filename)
                     results_data['pred_class'].append(names[class_id])
                     results_data['confidence'].append(round(confidence, 4))
                     results_data['bbox_xyxy'].append(",".join(map(str, bbox_coords)))
@@ -203,26 +201,20 @@ def run_inference(weights_path: str, source_dir: str, excel_path: str):
     # 从收集的结果创建一个新的DataFrame
     results_df = pd.DataFrame(results_data)
 
-    # 为了与原始DataFrame合并，我们需要一个共同的键。这里我们使用图片名称。
-    # 首先，重命名结果列以匹配原始Excel中的列名 '图片名称'。
-    results_df.rename(columns={'image_name': '图片名称'}, inplace=True)
-
     # 由于一张图片可能检测到多个目标，我们需要对结果进行聚合
-    # 我们将按图片名称分组，并用分号连接结果
+    # 我们将按原始图片名称和标注图片名称分组，并用分号连接结果
     agg_functions = {
         'pred_class': lambda x: '; '.join(x),
         'confidence': lambda x: '; '.join(map(str, x)),
-        'bbox_xyxy': lambda x: '; '.join(x),
-
+        'bbox_xyxy': lambda x: '; '.join(x)
     }
-    results_agg_df = results_df.groupby('图片名称').agg(agg_functions).reset_index()
-
-    # 将聚合后的结果合并回原始的DataFrame中
-    # 我们使用左连接（left merge）来确保所有原始行都被保留
-    final_df = pd.merge(df, results_agg_df, on='图片名称', how='left')
+    results_agg_df = results_df.groupby(['original_image_name', 'annotated_image_name']).agg(agg_functions).reset_index()
 
     # 为没有检测到目标的图片填充'No Detection'
-    final_df[['pred_class', 'confidence', 'bbox_xyxy']] = final_df[['pred_class', 'confidence', 'bbox_xyxy']].fillna('No Detection')
+    results_agg_df[['pred_class', 'confidence', 'bbox_xyxy']] = results_agg_df[['pred_class', 'confidence', 'bbox_xyxy']].fillna('No Detection')
+
+    # 使用结果数据作为最终DataFrame
+    final_df = results_agg_df
 
     try:
         final_df.to_excel(output_excel_path, index=False)
