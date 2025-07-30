@@ -1,0 +1,5 @@
+names:
+- object
+nc: 1
+train: D:\program\python\PythonProject\Yolo_seg_Alarm\Data\raw\train\images
+val: D:\program\python\PythonProject\Yolo_seg_Alarm\Data\raw\val\images
