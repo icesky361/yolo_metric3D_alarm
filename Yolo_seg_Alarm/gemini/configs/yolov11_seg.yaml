@@ -24,8 +24,8 @@
 # 例如: 如果 train 指向 '../Data/raw/train/images'，
 #       对于图片 '.../images/摄像头1/img1.jpg'，框架会查找 '.../images/摄像头1/img1.txt'。
 
-path: d:\\program\\python\\PythonProject\\Yolo_seg_Alarm\\Data\\raw
-model_path: d:\\program\\python\\PythonProject\\Yolo_seg_Alarm\\yolov8n-seg.pt
+path: G:/soft/soft/python project/Yolo_metric_alarm/Data/raw
+model_path: G:\soft\soft\python project\Yolo_metric_alarm\Yolo_seg_Alarm\gemini\models
 epochs: 100
 batch_size: 16
 img_size: 640
@@ -53,7 +53,8 @@ names:
 # ------------------------------------------------------------------------------
 # 模型权重。指定YOLOv11分割模型的预训练权重。
 # 对于初次训练，建议使用官方预训练权重，例如 'yolov11-n-seg.pt'。
-weights: yolov8n-seg.pt
+
+weights: yolov11l-seg.pt
 
 # ------------------------------------------------------------------------------
 # 4. 模型超参数 (可被 train.py 动态调整)
@@ -66,11 +67,13 @@ weights: yolov8n-seg.pt
 
 # --- 训练设置 ---
 batch: 8       # 默认批量大小 (会被动态覆盖)。一次训练迭代中处理的图片数量。
-epochs: 100      # 训练轮次。整个数据集将被完整训练100次。
+epochs: 10      # 训练轮次。整个数据集将被完整训练100次。
 imgsz: 640       # 训练时的输入图片尺寸。所有图片将被缩放到 640x640。
 optimizer: AdamW # 优化器。AdamW 是一个在计算机视觉任务中表现稳健的常用选择。
 amp: True         # 启用混合精度训练，减少显存占用并加速训练
-
+task: detect     # 任务类型。'detect' 用于目标检测任务，'segment' 用于分割任务。
+patience: 20     # 早停策略。训练过程中连续20轮没有改善验证损失，则停止训练。
+save_period: -1  # 模型保存周期。-5 表示每5个 epoch 都保存模型。
 # --- 学习率 ---
 lr0: 0.01      # 初始学习率。训练开始时的学习率。
 lrf: 0.01      # 最终学习率因子。最终学习率 = lr0 * lrf。用于学习率衰减策略。

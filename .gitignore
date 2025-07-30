@@ -10,6 +10,14 @@ dist/
 # 打包配置文件
 *.spec
 icon.ico
+*.zip
+# 压缩文件
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+*.bz2
 # 可选：专门存放发布文件的目录
  !/release-binaries/
 # 模型文件
@@ -37,6 +45,10 @@ Yolo_seg_Alarm/gemini/reports/
 *.png
 *.jpg
 *.jpeg
+# 忽略进度文件目录
+/Yolo_seg_Alarm/gemini/data_preparation/progress/
+/Yolo_seg_Alarm/gemini/data_preparation/progress/*
+args.yaml
 *.bmp
 *.gif
 *.bmp
@@ -45,6 +57,9 @@ Yolo_seg_Alarm/gemini/reports/
 *.txt
 # 不忽略requirements.txt
 !requirements.txt
+!requirements_high.txt
+!requirements_low.txt
+!requirements_metric3Dv2.txt
 # 数据目录
 Data/
 
