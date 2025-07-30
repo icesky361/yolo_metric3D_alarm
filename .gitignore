@@ -60,6 +60,7 @@ args.yaml
 !requirements_high.txt
 !requirements_low.txt
 !requirements_metric3Dv2.txt
+train_progress.json
 # 数据目录
 Data/
 
