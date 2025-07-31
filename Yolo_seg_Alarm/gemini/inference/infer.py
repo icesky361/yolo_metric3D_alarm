@@ -78,7 +78,6 @@ from PIL import Image
 import logging
 import numpy as np
 from PIL import Image
-import concurrent.futures
 
 # 配置日志记录器
 logging.basicConfig(
@@ -182,27 +181,52 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
     
     try:
         # 渐进式批量推理 - 将图像分成多个较小的批次
-        batch_size = 64# A4500 20GB显存调整的批量大小，测试更大批次是否提升性能
+        batch_size = 32# 根据RTX A4500 20GB显存调整的批量大小
         total_batches = (len(image_files) + batch_size - 1) // batch_size
         logger.info(f'开始渐进式批量推理，共 {len(image_files)} 张图像，每批 {batch_size} 张，总批次: {total_batches}')
 
-        # 处理批量推理结果（使用线程池并行处理）
+        # 处理批量推理结果（添加进度条）
         import time
         start_time = time.time()
-        
-        # 创建线程池，最大线程数设为CPU核心数的2倍
-        max_workers = min(16, max(2, torch.get_num_threads() * 2))
-        logger.info(f'创建线程池，最大线程数: {max_workers}')
-        
+        results = []
+
         # 预热模型，减少首次推理开销
         if len(image_files) > 0:
             warmup_img = str(image_files[0])
             with torch.no_grad():
                 model.predict(source=warmup_img, device=device, task='detect', batch=1, half=True, verbose=False)
             logger.info('模型预热完成')
-        
-        # 定义处理单个推理结果的函数
-        def process_result(result_idx, res, img_path):
+
+        # 分批次处理图像
+        for batch_idx in range(total_batches):
+            start_idx = batch_idx * batch_size
+            end_idx = min(start_idx + batch_size, len(image_files))
+            batch_files = image_files[start_idx:end_idx]
+            batch_paths = [str(img_path) for img_path in batch_files]
+
+            # 记录批次开始时间
+            batch_start_time = time.time()
+
+            # 对当前批次进行推理
+            with torch.no_grad():
+                logger.info(f'处理批次 {batch_idx+1}/{total_batches}，共 {len(batch_paths)} 张图像')
+                batch_results = model.predict(source=batch_paths, device=device, task='detect', batch=batch_size, half=True, verbose=False)
+                results.extend(batch_results)
+
+            # 记录批次结束时间
+            batch_elapsed = time.time() - batch_start_time
+            logger.info(f'批次 {batch_idx+1}/{total_batches} 处理完成，耗时 {batch_elapsed:.2f} 秒，每秒处理 {len(batch_paths)/batch_elapsed:.2f} 张图像')
+
+        # 处理所有推理结果
+        logger.info(f'所有批次推理完成，开始处理结果')
+        for i, res in enumerate(tqdm(results, desc="正在处理推理结果")):
+            img_path = image_files[i]
+            # 每处理50张图像更新一次进度时间信息
+            if i % 100 == 0 and i > 0:
+                elapsed = time.time() - start_time
+                remaining = (elapsed / i) * (len(results) - i)
+                logger.info(f"已处理 {i}/{len(results)} 张图像，耗时 {elapsed:.2f} 秒，预计剩余 {remaining:.2f} 秒")
+            
             # 从模型结果中获取类别名称
             names = res.names
 
@@ -222,7 +246,6 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             Image.fromarray(annotated_image).save(output_images_path / new_filename)
 
             # 检查是否有检测到的边界框
-            local_results = []
             if res.boxes is not None and len(res.boxes) > 0:
                 # 遍历每个检测到的边界框
                 for box in res.boxes:
@@ -230,86 +253,19 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                     confidence = float(box.conf) # 置信度
                     bbox_coords = box.xyxy[0].cpu().numpy().astype(int).tolist() # 边界框坐标 [x1, y1, x2, y2]
                     
-                    # 将结果添加到局部数据容器中
-                    local_results.append({
-                        'original_image_name': img_path.name,
-                        'annotated_image_name': new_filename,
-                        'pred_class': names[class_id],
-                        'confidence': round(confidence, 4),
-                        'bbox_xyxy': ",".join(map(str, bbox_coords))
-                    })
+                    # 将结果添加到数据容器中
+                    results_data['original_image_name'].append(img_path.name)
+                    results_data['annotated_image_name'].append(new_filename)
+                    results_data['pred_class'].append(names[class_id])
+                    results_data['confidence'].append(round(confidence, 4))
+                    results_data['bbox_xyxy'].append(",".join(map(str, bbox_coords)))
             else:
                 # 如果没有检测到边界框，也添加一条记录，但填充空值
-                local_results.append({
-                    'original_image_name': img_path.name,
-                    'annotated_image_name': new_filename,
-                    'pred_class': '未检测到',
-                    'confidence': 0.0,
-                    'bbox_xyxy': ''
-                })
-            
-            return local_results
-        
-        # 使用线程池并行处理结果
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # 提交所有推理任务并并行处理结果
-            futures = []
-            processed_count = 0
-            
-            # 分批次处理图像
-            for batch_idx in range(total_batches):
-                start_idx = batch_idx * batch_size
-                end_idx = min(start_idx + batch_size, len(image_files))
-                batch_files = image_files[start_idx:end_idx]
-                batch_paths = [str(img_path) for img_path in batch_files]
-
-                # 记录批次开始时间
-                batch_start_time = time.time()
-
-                # 对当前批次进行推理
-                with torch.no_grad():
-                    logger.info(f'处理批次 {batch_idx+1}/{total_batches}，共 {len(batch_paths)} 张图像')
-                    batch_results = model.predict(source=batch_paths, device=device, task='detect', batch=batch_size, half=True, verbose=False)
-
-                # 记录批次结束时间
-                batch_elapsed = time.time() - batch_start_time
-                logger.info(f'批次 {batch_idx+1}/{total_batches} 推理完成，耗时 {batch_elapsed:.2f} 秒，每秒处理 {len(batch_paths)/batch_elapsed:.2f} 张图像')
-                
-                # 提交当前批次结果到线程池处理
-                for i, res in enumerate(batch_results):
-                    global_idx = start_idx + i
-                    img_path = image_files[global_idx]
-                    future = executor.submit(process_result, global_idx, res, img_path)
-                    futures.append(future)
-            
-            # 收集所有结果
-            logger.info(f'所有批次推理完成，开始收集并行处理结果，共 {len(futures)} 个任务')
-            progress_bar = tqdm(total=len(futures), desc="正在收集处理结果")
-            for future in concurrent.futures.as_completed(futures):
-                try:
-                    local_results = future.result()
-                    for result in local_results:
-                        for key, value in result.items():
-                            results_data[key].append(value)
-                    processed_count += 1
-                    progress_bar.update(1)
-                    if processed_count % 100 == 0 or processed_count == len(futures):
-                        elapsed = time.time() - start_time
-                        remaining = (elapsed / processed_count) * (len(futures) - processed_count)
-                        logger.info(f"已处理 {processed_count}/{len(futures)} 张图像，耗时 {elapsed:.2f} 秒，预计剩余 {remaining:.2f} 秒")
-                except Exception as e:
-                    logger.error(f"处理结果时发生错误: {e}", exc_info=True)
-            progress_bar.close()
-
-        # 计算总时长和平均每秒处理图像数
-        total_elapsed = time.time() - start_time
-        avg_speed = len(image_files) / total_elapsed if total_elapsed > 0 else 0
-
-        # 输出统计信息
-        logger.info(f'所有结果处理完成，共处理 {len(image_files)} 张图像，检测目标对象 {len(results_data["original_image_name"])} 个')
-        logger.info(f'总时长: {total_elapsed:.2f} 秒，平均每秒处理 {avg_speed:.2f} 张图像')
-
-
+                results_data['original_image_name'].append(img_path.name)
+                results_data['annotated_image_name'].append(new_filename)
+                results_data['pred_class'].append('未检测到')
+                results_data['confidence'].append(0.0)
+                results_data['bbox_xyxy'].append('')
 
     except Exception as e:
         logger.error(f"批量推理过程中发生错误: {e}", exc_info=True)

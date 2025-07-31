@@ -5,18 +5,23 @@ from ultralytics import YOLO
 import os
 import sys
 import argparse
+<<<<<<< HEAD
 import json
 from datetime import datetime
 import time
 import threading
 from tqdm import tqdm
 import logging
+=======
+import sys
+>>>>>>> parent of b3621d3 (perf(inference): 【关键优化】提高推理速度，使用线程池并行处理推理结果以提升性能)
 # 强制添加命令行参数确保任务类型为检测
 if '--task' not in sys.argv:
     sys.argv.extend(['--task', 'detect'])
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from utils.environment import get_device_and_adjust_config
 
+<<<<<<< HEAD
 # 配置日志
 log_dir = Path(__file__).parent.parent / 'logs'
 log_dir.mkdir(exist_ok=True)
@@ -83,6 +88,8 @@ def save_progress(progress_file, epoch, model_path, stats):
     except IOError as e:
         logging.error(f"进度文件写入失败: {e}")
 
+=======
+>>>>>>> parent of b3621d3 (perf(inference): 【关键优化】提高推理速度，使用线程池并行处理推理结果以提升性能)
 # 1. 加载YAML配置文件
 def load_config(config_path):
     config_path = Path(config_path)
@@ -94,7 +101,7 @@ def load_config(config_path):
 def prepare_data_paths(config):
     base_path = Path(config['path'])
     
-    # 创建标签目录并复制标签文件
+    # 创建标签目录的符号链接
     for split in ['train', 'val']:
         # 原始图片目录
         img_dir = base_path / split / 'images'
@@ -102,20 +109,14 @@ def prepare_data_paths(config):
         label_dir = base_path / split / 'labels'
         label_dir.mkdir(exist_ok=True)
         
-        # 复制标签文件
+        # 为每个大屏编号子文件夹创建符号链接
         for screen_folder in img_dir.iterdir():
             if screen_folder.is_dir():
-                # 目标标签文件夹
-                target_label_folder = label_dir / screen_folder.name
-                target_label_folder.mkdir(exist_ok=True)
-                
-                # 复制标签文件
-                for img_file in screen_folder.glob('*.*'):
-                    if img_file.suffix in ['.jpg', '.png']:
-                        label_file = img_file.with_suffix('.txt')
-                        if label_file.exists():
-                            import shutil
-                            shutil.copy2(label_file, target_label_folder / label_file.name)
+                # 标签目录中的链接指向图片目录中的对应子文件夹
+                link_path = label_dir / screen_folder.name
+                if not link_path.exists():
+                    # 创建目录符号链接
+                    os.symlink(screen_folder, link_path, target_is_directory=True)
     
     # 设置训练集和验证集路径
     train_path = base_path / 'train' / 'images'
@@ -156,12 +157,15 @@ def save_model_and_progress(model, epoch, total_epochs, start_time, stats):
 
 # 主训练函数
 def main():
+<<<<<<< HEAD
     # 定义一个在退出前强制保存进度的函数
     def final_save(epoch, model_path, stats):
         progress_file = get_progress_file_path()
         save_progress(progress_file, epoch, model_path, stats)
         logging.info(f"在退出前，强制保存了第 {epoch} 个 epoch 的进度")
 
+=======
+>>>>>>> parent of b3621d3 (perf(inference): 【关键优化】提高推理速度，使用线程池并行处理推理结果以提升性能)
     # 加载配置
     config_path = Path(__file__).parent.parent / 'configs' / 'yolov11_seg.yaml'
     config = load_config(config_path)
@@ -172,6 +176,7 @@ def main():
     config['path'] = str(data_path)
     # 计算base_path并保存为变量（关键修改）
     base_path = Path(config['path'])
+<<<<<<< HEAD
 
     # 断点续训相关
     progress_file = get_progress_file_path()
@@ -203,6 +208,8 @@ def main():
             historical_stats = {'epochs_completed': 0, 'time': 0, 'best_metrics': {}}
     else:
         logging.info("未检测到可继续的训练进度，开始新训练")
+=======
+>>>>>>> parent of b3621d3 (perf(inference): 【关键优化】提高推理速度，使用线程池并行处理推理结果以提升性能)
     
     # 根据硬件调整配置
     device, config = get_device_and_adjust_config(config)
@@ -225,6 +232,7 @@ def main():
     model_path = Path(config['model_path']) / config['weights']
     # 显式指定检测任务类型加载模型
     model = YOLO(str(model_path), task='detect')
+<<<<<<< HEAD
     # 调整训练参数以支持断点续训
     train_args = {
         'task': args.task,
@@ -337,6 +345,29 @@ def main():
         if progress_file.exists():
             save_progress(progress_file, 0, None, {'epochs_completed': 0, 'time': 0, 'best_metrics': {}})
             logging.info("训练完全完成，已重置进度文件")
+=======
+    # 训练模型
+    # 强制指定任务类型为检测
+    results = model.train(task=args.task,
+        data=config_path,
+        epochs=config['epochs'],
+        batch=config['batch'],
+        imgsz=config['imgsz'],
+        device=device.type,
+        project='yolo_seg_alarm',
+        name='train2_results',
+        exist_ok=True
+    )
+    
+    # 保存训练后的模型
+    model.save('yolo_seg_alarm_train2.pt')
+    import shutil
+    for split in ['train', 'val']:
+        label_dir = base_path / split / 'labels'
+        if label_dir.exists():
+            shutil.rmtree(label_dir)
+    print("训练完成，模型已保存并清理临时文件")
+>>>>>>> parent of b3621d3 (perf(inference): 【关键优化】提高推理速度，使用线程池并行处理推理结果以提升性能)
 
 if __name__ == '__main__':
     main()
