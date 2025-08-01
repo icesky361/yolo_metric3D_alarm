@@ -55,11 +55,13 @@ args.yaml
 *.psd
 # 文本文件
 *.txt
+train_progress.json
 # 不忽略requirements.txt
 !requirements.txt
 !requirements_high.txt
 !requirements_low.txt
 !requirements_metric3Dv2.txt
+
 # 数据目录
 Data/
 
