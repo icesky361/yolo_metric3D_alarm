@@ -229,24 +229,31 @@ def main():
         
         # 使用tqdm创建进度条
         with tqdm(total=total_epochs, initial=0, desc="训练进度") as pbar:
-            # 使用Ultralytics的训练函数
-            results = model.train(
-                task=args.task,
-                data=config_path,
-                epochs=total_epochs,
-                batch=config['batch'],
-                imgsz=config['imgsz'],
-                device=device.type,
-                project='yolo_seg_alarm',
-                name='train2_results',
-                exist_ok=True,
-                resume=last_epoch > 0,
-                # 添加回调函数保存进度
-                callbacks=[lambda epoch, model=model, start_time=start_time, stats=stats, args=args: 
-                           save_model_and_progress(model, last_epoch + epoch + 1, last_epoch + total_epochs, start_time, stats) 
-                           if (epoch + 1) % args.save_interval == 0 else None]
-            )
-            pbar.update(total_epochs)
+            # 自定义训练循环以支持进度保存
+            for epoch in range(total_epochs):
+                # 训练单个epoch
+                results = model.train(
+                    task=args.task,
+                    data=config_path,
+                    epochs=1,
+                    batch=config['batch'],
+                    imgsz=config['imgsz'],
+                    device=device.type,
+                    project='yolo_seg_alarm',
+                    name='train2_results',
+                    exist_ok=True,
+                    resume=last_epoch > 0 and epoch == 0
+                )
+                
+                current_epoch = last_epoch + epoch + 1
+                pbar.update(1)
+                
+                # 定期保存进度和模型
+                if (epoch + 1) % args.save_interval == 0 or epoch == total_epochs - 1:
+                    save_model_and_progress(model, current_epoch, last_epoch + total_epochs, start_time, stats)
+
+            # 保存最终模型
+            save_model_and_progress(model, last_epoch + total_epochs, last_epoch + total_epochs, start_time, stats, is_final=True)
         
         # 保存最终模型
         save_model_and_progress(model, last_epoch + total_epochs, last_epoch + total_epochs, start_time, stats, is_final=True)
