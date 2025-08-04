@@ -249,45 +249,51 @@ def main():
         if last_epoch > 0 and args.resume:
             logging.info(f"训练范围: 从epoch {last_epoch+1} 到 epoch {last_epoch + total_epochs}")
         
-        # 使用tqdm创建进度条
-        with tqdm(total=total_epochs, initial=0, desc="训练进度") as pbar:
-            # 自定义训练循环以支持进度保存
-            # 总训练epoch数: {total_epochs}
-            for epoch in range(total_epochs):
-                # 计算当前实际epoch
-                current_epoch = last_epoch + epoch + 1
-                logging.info(f"正在训练 epoch {current_epoch}/{last_epoch + total_epochs}")
+        # 配置训练回调函数用于进度保存
+        class ProgressCallback:
+            def __init__(self, model, total_epochs, last_epoch, start_time, stats, save_interval):
+                self.model = model
+                self.total_epochs = total_epochs
+                self.last_epoch = last_epoch
+                self.start_time = start_time
+                self.stats = stats
+                self.save_interval = save_interval
                 
-                # 训练单个epoch (设置epochs=1是因为我们使用自定义循环控制总epoch数)
-                try:
-                    results = model.train(
-                            task=args.task,
-                            data=config_path,
-                            epochs=1,
-                            batch=config['batch'],
-                            imgsz=config['imgsz'],
-                            device=device.type,
-                            project='yolo_seg_alarm',
-                            name='train2_results',
-                            exist_ok=True,
-                            resume=last_epoch > 0 and epoch == 0,
-                            plots=False,  # 禁用绘图以避免字体问题
-                            save_json=True  # 保存结果为JSON格式（YOLO支持的参数）
-                        )
-                except Exception as e:
-                    logging.error(f"训练epoch {current_epoch}时出错: {e}")
-                    # 尝试保存进度并继续
-                    save_model_and_progress(model, current_epoch, last_epoch + total_epochs, start_time, stats)
-                    continue
-                  
-                pbar.update(1)
-                
+            def on_epoch_end(self, epoch):
+                current_epoch = self.last_epoch + epoch + 1
                 # 定期保存进度和模型
-                if (epoch + 1) % args.save_interval == 0 or epoch == total_epochs - 1:
-                    save_model_and_progress(model, current_epoch, last_epoch + total_epochs, start_time, stats)
-
-            # 保存最终模型
-            save_model_and_progress(model, last_epoch + total_epochs, last_epoch + total_epochs, start_time, stats, is_final=True)
+                if (epoch + 1) % self.save_interval == 0 or epoch == self.total_epochs - 1:
+                    save_model_and_progress(self.model, current_epoch, self.last_epoch + self.total_epochs, self.start_time, self.stats)
+                
+        # 创建回调实例
+        callback = ProgressCallback(model, total_epochs, last_epoch, start_time, stats, args.save_interval)
+        
+        try:
+            # 使用YOLO内置的多epoch训练功能
+            results = model.train(
+                    task=args.task,
+                    data=config_path,
+                    epochs=total_epochs,
+                    batch=config['batch'],
+                    imgsz=config['imgsz'],
+                    device=device.type,
+                    project='yolo_seg_alarm',
+                    name='train2_results',
+                    exist_ok=True,
+                    resume=last_epoch > 0,
+                    plots=False,
+                    save_json=True,
+                    callbacks=[callback]
+                )
+        except Exception as e:
+            # 获取当前训练到的epoch数
+            current_epoch = last_epoch + getattr(model, 'epoch', 0) + 1
+            logging.error(f"训练epoch {current_epoch}时出错: {e}")
+            # 保存进度
+            save_model_and_progress(model, current_epoch, last_epoch + total_epochs, start_time, stats)
+            
+        # 保存最终模型
+        save_model_and_progress(model, last_epoch + total_epochs, last_epoch + total_epochs, start_time, stats, is_final=True)
         
         # 清理临时文件
         import shutil
