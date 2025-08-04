@@ -14,8 +14,12 @@ from datetime import datetime
 from tqdm import tqdm
 # 设置matplotlib字体支持中文
 import matplotlib.pyplot as plt
-plt.rcParams["font.family"] = ["SimHei", "WenQuanYi Micro Hei", "Heiti TC", "sans-serif"]
+# 优先使用Windows系统常用中文字体
+plt.rcParams["font.family"] = ["SimHei", "Microsoft YaHei", "sans-serif"]
 plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+# 禁用matplotlib字体警告
+import logging
+logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
 # 强制添加命令行参数确保任务类型为检测
 if '--task' not in sys.argv:
     sys.argv.extend(['--task', 'detect'])
@@ -211,12 +215,16 @@ def main():
         stats = progress['stats']
         
         # 询问用户是否继续上次训练
+        original_epochs = config.get('epochs', 10)
         if saved_model_path and Path(saved_model_path).exists() and last_epoch > 0 and args.resume:
             logging.info(f"发现上次训练进度，从epoch {last_epoch+1} 开始")
             model = YOLO(saved_model_path, task='detect')
             # 设置从上次中断的epoch继续训练
-            config['epochs'] = config['epochs'] - last_epoch
-            logging.info(f"剩余训练epoch数: {config['epochs']}")
+            remaining_epochs = original_epochs - last_epoch
+            config['epochs'] = remaining_epochs
+            logging.info(f"总训练epoch数: {original_epochs}")
+            logging.info(f"已完成epoch数: {last_epoch}")
+            logging.info(f"剩余训练epoch数: {remaining_epochs}")
         else:
             model_path = Path(config['model_path']) / config['weights']
             # 显式指定检测任务类型加载模型
@@ -225,42 +233,63 @@ def main():
             stats = {'epochs_completed': 0, 'time': 0, 'best_metrics': None}
             logging.info("开始新的训练")
         
-        total_epochs = config['epochs']
+        # 确保从配置文件中正确读取epochs值
+        config_epochs = config.get('epochs', 10)
+        # 如果是继续训练，已经在上面调整过epochs值
+        if last_epoch > 0 and args.resume:
+            total_epochs = config['epochs']
+        else:
+            total_epochs = config_epochs
+        
         # 确保epochs是整数且大于0
         if not isinstance(total_epochs, int) or total_epochs <= 0:
             total_epochs = 10  # 默认值
             logging.warning(f"配置文件中epochs值无效，使用默认值: {total_epochs}")
+        
+        # 记录最终使用的epochs值
+        logging.info(f"最终训练总epoch数: {total_epochs}")
         start_time = time.time() - stats.get('time', 0)
+        
+        # 验证配置文件中的epochs值
+        config_epochs_value = config.get('epochs')
+        logging.info(f"从配置文件读取的epochs值: {config_epochs_value}")
+        logging.info(f"配置文件路径: {config_path}")
         
         # 训练模型
         logging.info(f"开始训练，共 {total_epochs} 个epoch")
-        logging.info(f"配置文件中的epochs值: {config.get('epochs')}")
+        if last_epoch > 0 and args.resume:
+            logging.info(f"训练范围: 从epoch {last_epoch+1} 到 epoch {last_epoch + total_epochs}")
         
         # 使用tqdm创建进度条
         with tqdm(total=total_epochs, initial=0, desc="训练进度") as pbar:
             # 自定义训练循环以支持进度保存
+            # 总训练epoch数: {total_epochs}
             for epoch in range(total_epochs):
-                  # 训练单个epoch
-                  results = model.train(
-                      task=args.task,
-                      data=config_path,
-                      epochs=1,
-                      batch=config['batch'],
-                      imgsz=config['imgsz'],
-                      device=device.type,
-                      project='yolo_seg_alarm',
-                      name='train2_results',
-                      exist_ok=True,
-                      resume=last_epoch > 0 and epoch == 0,
+                # 计算当前实际epoch
+                current_epoch = last_epoch + epoch + 1
+                logging.info(f"正在训练 epoch {current_epoch}/{last_epoch + total_epochs}")
+                
+                # 训练单个epoch (设置epochs=1是因为我们使用自定义循环控制总epoch数)
+                results = model.train(
+                    task=args.task,
+                    data=config_path,
+                    epochs=1,
+                    batch=config['batch'],
+                    imgsz=config['imgsz'],
+                    device=device.type,
+                    project='yolo_seg_alarm',
+                    name='train2_results',
+                    exist_ok=True,
+                    resume=last_epoch > 0 and epoch == 0,
                       # 禁用matplotlib绘图时的字体警告
                       plots=True
                   )
                   
-                  current_epoch = last_epoch + epoch + 1
-                  pbar.update(1)
-                  
-                  # 定期保存进度和模型
-                  if (epoch + 1) % args.save_interval == 0 or epoch == total_epochs - 1:
+                current_epoch = last_epoch + epoch + 1
+                pbar.update(1)
+                
+                # 定期保存进度和模型
+                if (epoch + 1) % args.save_interval == 0 or epoch == total_epochs - 1:
                     save_model_and_progress(model, current_epoch, last_epoch + total_epochs, start_time, stats)
 
             # 保存最终模型
