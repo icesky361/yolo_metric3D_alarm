@@ -140,13 +140,35 @@ def prepare_data_paths(config):
 
 # 保存模型并更新进度
 def save_model_and_progress(model, epoch, total_epochs, start_time, stats, is_final=False):
+    # 定义模型保存目录
+    model_dir = Path(__file__).parent.parent / 'models' / 'weights'
+    model_dir.mkdir(parents=True, exist_ok=True)
+    
+    # 定义训练结果目录
+    results_dir = Path('yolo_seg_alarm') / 'train2_results'
+    results_dir.mkdir(parents=True, exist_ok=True)
+    
     # 保存当前模型
     if is_final:
-        model_path = 'yolo_seg_alarm_train2.pt'
+        model_path = model_dir / 'last.pt'
     else:
-        model_path = f"intermediate_model_epoch_{epoch}.pt"
-    model.save(model_path)
+        model_path = results_dir / f"intermediate_model_epoch_{epoch}.pt"
+    
+    model.save(str(model_path))
     logging.info(f"已保存{'最终' if is_final else '中间'}模型: {model_path}")
+    
+    # 如果是最终模型，同时保存最佳模型和指定名称模型
+    if is_final:
+        # 保存为指定名称的最终模型
+        final_model_path = model_dir / 'yolo_seg_alarm_train2.pt'
+        model.save(str(final_model_path))
+        logging.info(f"已保存最终模型: {final_model_path}")
+        
+        # 如果有最佳模型，保存最佳模型
+        if hasattr(model, 'best') and model.best:
+            best_model_path = model_dir / 'best.pt'
+            model.save(str(best_model_path))
+            logging.info(f"已保存最佳模型: {best_model_path}")
     
     # 更新统计信息
     stats['epochs_completed'] = epoch
@@ -281,7 +303,9 @@ def main():
                     name='train2_results',
                     exist_ok=True,
                     resume=last_epoch > 0,
-                    plots=False,
+                    plots=True,
+                    # 确保训练图表保存到指定目录
+                    plots_dir='训练图标',
                     save_json=True,
                     callbacks=[callback]
                 )
