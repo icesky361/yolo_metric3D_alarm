@@ -183,7 +183,7 @@ def save_model_and_progress(model, epoch, total_epochs, start_time, stats, is_fi
         logging.warning(f"无法获取最佳指标: {e}")
     
     # 保存进度
-    save_progress(epoch, model_path, stats)
+    save_progress(epoch, str(model_path), stats)
     
     return model_path
 
@@ -289,6 +289,8 @@ def main():
                 
         # 创建回调实例
         callback = ProgressCallback(model, total_epochs, last_epoch, start_time, stats, args.save_interval)
+        # 注册回调函数
+        model.add_callback('on_epoch_end', callback.on_epoch_end)
         
         try:
             # 使用YOLO内置的多epoch训练功能
@@ -304,10 +306,7 @@ def main():
                     exist_ok=True,
                     resume=last_epoch > 0,
                     plots=True,
-                    # 确保训练图表保存到指定目录
-                    plots_dir='训练图标',
-                    save_json=True,
-                    callbacks=[callback]
+                    save_json=True
                 )
         except Exception as e:
             # 获取当前训练到的epoch数
