@@ -13,12 +13,24 @@ import threading
 from datetime import datetime
 from tqdm import tqdm
 # 设置matplotlib字体支持中文
+import matplotlib
+matplotlib.use('Agg')  # 使用Agg后端，避免在无GUI环境下报错
 import matplotlib.pyplot as plt
-# 优先使用Windows系统常用中文字体
-plt.rcParams["font.family"] = ["SimHei", "Microsoft YaHei", "sans-serif"]
-plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+from matplotlib import font_manager
+
+# 设置中文字体
+# 设置中文字体,已配置为用户提供的正确路径
+font_path = 'G:/soft/soft/anaconda/Lib/site-packages/matplotlib/mpl-data/fonts/ttf/simhei.ttf'
+if os.path.exists(font_path):
+    font_manager.fontManager.addfont(font_path)
+    plt.rcParams['font.sans-serif'] = ['SimHei']  # 指定默认字体
+    plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+else:
+    logging.warning(f"字体文件未找到于 {font_path}，中文可能无法正确显示。")
+    # 退而求其次，使用系统可用的中文字体
+    plt.rcParams["font.family"] = ["SimHei", "Microsoft YaHei", "sans-serif"]
+
 # 禁用matplotlib字体警告
-import logging
 logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
 # 强制添加命令行参数确保任务类型为检测
 if '--task' not in sys.argv:
@@ -125,33 +137,6 @@ def prepare_data_paths(config):
         raise FileNotFoundError(f"数据集路径不存在: {train_path} 或 {val_path}")
     
     return train_path, val_path
-
-# 保存模型并更新进度
-def save_model_and_progress(model, epoch, total_epochs, start_time, stats, is_final=False):
-    # 保存当前模型
-    model_path = f"{'final_model' if is_final else 'intermediate_model_epoch_' + str(epoch)}.pt"
-    model.save(model_path)
-    logging.info(f"已保存{'最终' if is_final else '中间'}模型: {model_path}")
-    
-    # 更新统计信息
-    stats['epochs_completed'] = epoch
-    stats['time'] = time.time() - start_time
-    
-    # 尝试获取最佳指标
-    try:
-        # 对于YOLO模型，结果通常存储在trainer对象中
-        if hasattr(model, 'trainer') and hasattr(model.trainer, 'best_metrics'):
-            stats['best_metrics'] = model.trainer.best_metrics
-            logging.info(f"已更新最佳指标: {model.trainer.best_metrics}")
-        elif hasattr(model, 'best') and model.best:
-            stats['best_metrics'] = model.best.tojson()
-    except Exception as e:
-        logging.warning(f"无法获取最佳指标: {e}")
-    
-    # 保存进度
-    save_progress(epoch, model_path, stats)
-    
-    return model_path
 
 # 保存模型并更新进度
 def save_model_and_progress(model, epoch, total_epochs, start_time, stats, is_final=False):
@@ -276,19 +261,19 @@ def main():
                 # 训练单个epoch (设置epochs=1是因为我们使用自定义循环控制总epoch数)
                 try:
                     results = model.train(
-                        task=args.task,
-                        data=config_path,
-                        epochs=1,
-                        batch=config['batch'],
-                        imgsz=config['imgsz'],
-                        device=device.type,
-                        project='yolo_seg_alarm',
-                        name='train2_results',
-                        exist_ok=True,
-                        resume=last_epoch > 0 and epoch == 0,
-                        plots=False,  # 禁用绘图以避免字体问题
-                        save_csv=False  # 禁用CSV保存以避免解析问题
-                    )
+                            task=args.task,
+                            data=config_path,
+                            epochs=1,
+                            batch=config['batch'],
+                            imgsz=config['imgsz'],
+                            device=device.type,
+                            project='yolo_seg_alarm',
+                            name='train2_results',
+                            exist_ok=True,
+                            resume=last_epoch > 0 and epoch == 0,
+                            plots=False,  # 禁用绘图以避免字体问题
+                            save_json=True  # 保存结果为JSON格式（YOLO支持的参数）
+                        )
                 except Exception as e:
                     logging.error(f"训练epoch {current_epoch}时出错: {e}")
                     # 尝试保存进度并继续
@@ -312,17 +297,17 @@ def main():
                 shutil.rmtree(label_dir)
         logging.info("训练完成，模型已保存并清理临时文件")
         
-        # 训练完成后重置进度文件
-        save_progress(0, None, {'epochs_completed': 0, 'time': 0, 'best_metrics': None})
+        # 训练完成后保留最终进度
+        save_progress(last_epoch + total_epochs, None, stats)
     
     except KeyboardInterrupt:
         logging.info("检测到Ctrl+C中断，正在保存进度...")
         try:
             # 尝试保存当前模型和进度
             if 'model' in locals() and 'last_epoch' in locals() and 'total_epochs' in locals() and 'start_time' in locals() and 'stats' in locals():
-                current_epoch = last_epoch + (time.time() - start_time) / (stats.get('time', time.time() - start_time) / max(1, stats.get('epochs_completed', 1)))
-                current_epoch = int(round(current_epoch))
-                save_model_and_progress(model, current_epoch, last_epoch + total_epochs, start_time, stats)
+                  # 使用已完成的epoch数作为当前epoch
+                  current_epoch = last_epoch + stats.get('epochs_completed', 0)
+                  save_model_and_progress(model, current_epoch, last_epoch + total_epochs, start_time, stats)
         except Exception as e:
             logging.error(f"保存进度时出错: {e}")
         logging.info("进度已保存，程序已终止")
@@ -339,12 +324,7 @@ def main():
     
     print("训练完成，模型已保存并清理临时文件")
 
-# 确保导入time模块
-import time
-
-
-# 确保导入time模块
-import time
+# 已在文件开头导入time模块，此处无需重复导入
 
 
 if __name__ == '__main__':
