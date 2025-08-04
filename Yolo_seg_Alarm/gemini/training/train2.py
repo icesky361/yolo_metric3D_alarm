@@ -83,6 +83,7 @@ def save_progress(last_epoch, model_path, stats):
         logging.info(f"已保存进度至: {progress_file}")
     except IOError as e:
         logging.error(f"进度文件写入失败: {e}")
+    return progress_file
 
 # 1. 加载YAML配置文件
 def load_config(config_path):
@@ -126,11 +127,11 @@ def prepare_data_paths(config):
     return train_path, val_path
 
 # 保存模型并更新进度
-def save_model_and_progress(model, epoch, total_epochs, start_time, stats):
+def save_model_and_progress(model, epoch, total_epochs, start_time, stats, is_final=False):
     # 保存当前模型
-    model_path = f"intermediate_model_epoch_{epoch}.pt"
+    model_path = f"{'final_model' if is_final else 'intermediate_model_epoch_' + str(epoch)}.pt"
     model.save(model_path)
-    logging.info(f"已保存中间模型: {model_path}")
+    logging.info(f"已保存{'最终' if is_final else '中间'}模型: {model_path}")
     
     # 更新统计信息
     stats['epochs_completed'] = epoch
@@ -138,14 +139,17 @@ def save_model_and_progress(model, epoch, total_epochs, start_time, stats):
     
     # 尝试获取最佳指标
     try:
-        if hasattr(model, 'best') and model.best:
+        # 对于YOLO模型，结果通常存储在trainer对象中
+        if hasattr(model, 'trainer') and hasattr(model.trainer, 'best_metrics'):
+            stats['best_metrics'] = model.trainer.best_metrics
+            logging.info(f"已更新最佳指标: {model.trainer.best_metrics}")
+        elif hasattr(model, 'best') and model.best:
             stats['best_metrics'] = model.best.tojson()
     except Exception as e:
         logging.warning(f"无法获取最佳指标: {e}")
     
     # 保存进度
-    progress_file = get_progress_file_path()
-    save_progress(progress_file, epoch, model_path, stats)
+    save_progress(epoch, model_path, stats)
     
     return model_path
 
@@ -270,22 +274,27 @@ def main():
                 logging.info(f"正在训练 epoch {current_epoch}/{last_epoch + total_epochs}")
                 
                 # 训练单个epoch (设置epochs=1是因为我们使用自定义循环控制总epoch数)
-                results = model.train(
-                    task=args.task,
-                    data=config_path,
-                    epochs=1,
-                    batch=config['batch'],
-                    imgsz=config['imgsz'],
-                    device=device.type,
-                    project='yolo_seg_alarm',
-                    name='train2_results',
-                    exist_ok=True,
-                    resume=last_epoch > 0 and epoch == 0,
-                      # 禁用matplotlib绘图时的字体警告
-                      plots=True
-                  )
+                try:
+                    results = model.train(
+                        task=args.task,
+                        data=config_path,
+                        epochs=1,
+                        batch=config['batch'],
+                        imgsz=config['imgsz'],
+                        device=device.type,
+                        project='yolo_seg_alarm',
+                        name='train2_results',
+                        exist_ok=True,
+                        resume=last_epoch > 0 and epoch == 0,
+                        plots=False,  # 禁用绘图以避免字体问题
+                        save_csv=False  # 禁用CSV保存以避免解析问题
+                    )
+                except Exception as e:
+                    logging.error(f"训练epoch {current_epoch}时出错: {e}")
+                    # 尝试保存进度并继续
+                    save_model_and_progress(model, current_epoch, last_epoch + total_epochs, start_time, stats)
+                    continue
                   
-                current_epoch = last_epoch + epoch + 1
                 pbar.update(1)
                 
                 # 定期保存进度和模型

@@ -78,6 +78,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+data_analysis.py
 # 虚拟环境
 venv/
 env/
