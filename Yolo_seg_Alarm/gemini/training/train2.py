@@ -314,9 +314,12 @@ def main():
             logging.error(f"训练epoch {current_epoch}时出错: {e}")
             # 保存进度
             save_model_and_progress(model, current_epoch, last_epoch + total_epochs, start_time, stats)
-            
-        # 保存最终模型
-        save_model_and_progress(model, last_epoch + total_epochs, last_epoch + total_epochs, start_time, stats, is_final=True)
+            return  # 训练失败，退出函数
+        else:
+            # 只有训练成功完成时才保存最终模型和进度
+            save_model_and_progress(model, last_epoch + total_epochs, last_epoch + total_epochs, start_time, stats, is_final=True)
+            # 训练完成后保留最终进度
+            save_progress(last_epoch + total_epochs, None, stats)
         
         # 清理临时文件
         import shutil
@@ -326,8 +329,7 @@ def main():
                 shutil.rmtree(label_dir)
         logging.info("训练完成，模型已保存并清理临时文件")
         
-        # 训练完成后保留最终进度
-        save_progress(last_epoch + total_epochs, None, stats)
+        # 已在训练成功分支中保存最终进度，此处无需重复
     
     except KeyboardInterrupt:
         logging.info("检测到Ctrl+C中断，正在保存进度...")
@@ -346,7 +348,9 @@ def main():
         try:
             # 尝试保存当前进度
             if 'model' in locals() and 'last_epoch' in locals() and 'stats' in locals():
-                save_progress(last_epoch + stats.get('epochs_completed', 0), saved_model_path, stats)
+                current_epoch = last_epoch + getattr(model, 'epoch', 0) + 1
+            stats['epochs_completed'] = current_epoch  # 更新实际完成轮次
+            save_progress(current_epoch, saved_model_path, stats)
         except Exception as save_e:
             logging.error(f"保存进度时出错: {save_e}")
         raise
