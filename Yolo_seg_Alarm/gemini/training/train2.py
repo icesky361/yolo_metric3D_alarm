@@ -484,76 +484,7 @@ def main():
     
     print("训练完成，模型已保存并清理临时文件")
 
+
+
 if __name__ == '__main__':
     main()
-
-def save_model_and_progress(model, epoch, total_epochs, start_time, stats, is_final=False):
-    # 定义模型保存目录
-    # 使用可写的模型保存目录
-    model_dir = Path(get_writable_dir(str(Path(__file__).parent.parent / 'models' / 'weights')))
-    logging.info(f"使用模型保存目录: {model_dir}")
-    model_dir.mkdir(parents=True, exist_ok=True)
-    
-    # 定义训练结果目录
-    results_dir = Path('yolo_seg_alarm') / 'train2_results'
-    results_dir.mkdir(parents=True, exist_ok=True)
-    
-    # 每个epoch都保存last.pt
-    last_model_path = model_dir / 'last.pt'
-    model.save(str(last_model_path))
-    logging.info(f"已保存最新模型: {last_model_path}")
-    
-    # 保存最佳模型
-    # 保存最佳模型
-    # 获取当前验证指标
-    current_map = stats.get('best_metrics', 0)
-    try:
-        if hasattr(model, 'metrics'):
-            current_map = model.metrics.box.map50 if hasattr(model.metrics, 'box') else model.metrics.map50
-            logging.info(f"当前验证mAP50: {current_map}")
-    except Exception as e:
-        logging.warning(f"获取验证指标失败: {e}")
-    
-    # 确保第一轮训练后一定保存最佳模型
-    best_model_path = None
-    if not (model_dir / 'best.pt').exists():
-        best_model_path = model_dir / 'best.pt'
-        model.save(str(best_model_path))
-        stats['best_metrics'] = current_map
-        stats['best_model_path'] = str(best_model_path)
-        logging.info(f"第一轮训练完成，保存初始最佳模型: {best_model_path}, mAP50: {current_map}")
-    # 后续轮次根据指标更新
-    elif current_map > stats.get('best_metrics', 0):
-        best_model_path = model_dir / 'best.pt'
-        model.save(str(best_model_path))
-        stats['best_metrics'] = current_map
-        stats['best_model_path'] = str(best_model_path)
-        logging.info(f"更新最佳模型: {best_model_path}, mAP50: {current_map}")
-    
-    # 保存中间模型
-    intermediate_model_path = results_dir / f"intermediate_model_epoch_{epoch}.pt"
-    model.save(str(intermediate_model_path))
-    logging.info(f"已保存中间模型: {intermediate_model_path}")
-    
-    # 如果是最终模型，保存为指定名称的最终模型
-    if is_final:
-        final_model_path = model_dir / 'yolo_seg_alarm_train2.pt'
-        model.save(str(final_model_path))
-        logging.info(f"已保存最终模型: {final_model_path}")
-    
-    # 更新统计信息
-    stats['epochs_completed'] = epoch
-    stats['time'] = time.time() - start_time
-    
-    # 尝试获取最佳指标
-    try:
-        if hasattr(model, 'best') and model.best:
-            stats['best_metrics'] = model.best.tojson()
-            logging.info(f"当前最佳指标: {model.best}")
-    except Exception as e:
-        logging.warning(f"无法获取最佳指标: {e}")
-    
-    # 保存进度
-    save_progress(epoch, str(last_model_path), stats)
-    
-    return last_model_path
