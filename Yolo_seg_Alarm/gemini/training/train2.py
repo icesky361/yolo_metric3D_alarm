@@ -89,15 +89,17 @@ def load_progress():
     return default_progress
 
 # 保存进度
-def save_progress(last_epoch, model_path, stats):
+def save_progress(last_epoch, model_path, stats, original_epochs, best_model_path=None):
     # 确保使用可写目录
     progress_file = Path(get_writable_dir(str(Path(__file__).parent / 'progress'))) / 'train_progress.json'
     logging.debug(f"保存进度到: {progress_file}")
-    logging.debug(f"保存进度: last_epoch={last_epoch}, model_path={model_path}, stats={stats}")
+    logging.debug(f"保存进度: last_epoch={last_epoch}, model_path={model_path}, best_model_path={best_model_path}, stats={stats}")
     progress_file = get_progress_file_path()
     progress_data = {
         'last_epoch': last_epoch,
         'model_path': model_path,
+        'best_model_path': best_model_path,
+        'original_epochs': original_epochs,
         'stats': stats
     }
     try:
@@ -168,12 +170,19 @@ def save_model_and_progress(model, epoch, total_epochs, start_time, stats, is_fi
     logging.info(f"已保存最新模型: {last_model_path}")
     
     # 保存最佳模型
+    # 确保至少保存一次最佳模型
     if hasattr(model, 'best') and model.best:
         best_model_path = model_dir / 'best.pt'
         model.save(str(best_model_path))
         logging.info(f"已更新最佳模型: {best_model_path}")
+    # 第一轮训练强制保存最佳模型
+    elif epoch == 1 and not (model_dir / 'best.pt').exists():
+        best_model_path = model_dir / 'best.pt'
+        model.save(str(best_model_path))
+        logging.info(f"第一轮训练完成,保存初始最佳模型: {best_model_path}")
     
     # 保存中间模型（如果启用）
+    intermediate_model_path = None
     if save_intermediate:
         intermediate_model_path = results_dir / f"intermediate_model_epoch_{epoch}.pt"
         model.save(str(intermediate_model_path))
@@ -198,7 +207,7 @@ def save_model_and_progress(model, epoch, total_epochs, start_time, stats, is_fi
         logging.warning(f"无法获取最佳指标: {e}")
     
     # 保存进度
-    save_progress(epoch, str(last_model_path), stats)
+    save_progress(epoch, str(last_model_path), stats, original_epochs, str(best_model_path) if best_model_path else None)
     
     return last_model_path
 
@@ -228,7 +237,8 @@ def main():
         parser = argparse.ArgumentParser()
         parser.add_argument('--task', type=str, default='detect', help='任务类型')
         parser.add_argument('--save_interval', type=int, default=5, help='每隔多少个epoch保存一次进度')
-        parser.add_argument('--resume', action='store_true', help='是否从上次进度继续训练')
+        parser.add_argument('--resume', action='store_true', help='从上次进度继续训练')
+        parser.add_argument('--no_resume', action='store_true', help='不使用上次训练进度，强制从头开始')
         parser.add_argument('--save_intermediate', action='store_true', help='是否保存中间模型')
         args = parser.parse_args()
         
@@ -240,19 +250,47 @@ def main():
         last_epoch = progress['last_epoch']
         saved_model_path = progress['model_path']
         stats = progress['stats']
-        
-        # 询问用户是否继续上次训练
-        original_epochs = config.get('epochs', 10)
-        if saved_model_path and Path(saved_model_path).exists() and last_epoch > 0 and args.resume:
-            logging.info(f"发现上次训练进度，从epoch {last_epoch+1} 开始")
-            model = YOLO(saved_model_path, task='detect')
-            # 设置从上次中断的epoch继续训练
-            remaining_epochs = original_epochs - last_epoch
-            config['epochs'] = remaining_epochs
-            logging.info(f"总训练epoch数: {original_epochs}")
-            logging.info(f"已完成epoch数: {last_epoch}")
-            logging.info(f"剩余训练epoch数: {remaining_epochs}")
+    
+        # 调试日志：显示进度文件内容
+        logging.debug(f"进度文件内容: last_epoch={last_epoch}, saved_model_path={saved_model_path}, stats={stats}")
+    
+        # 验证模型路径
+        model_exists = False
+        if saved_model_path:
+            saved_model_path = Path(saved_model_path)
+            # 如果是相对路径，转换为绝对路径
+            if not saved_model_path.is_absolute():
+                saved_model_path = Path(__file__).parent / saved_model_path
+            model_exists = saved_model_path.exists() and saved_model_path.stat().st_size > 0
+            logging.debug(f"解析后的模型路径: {saved_model_path}, 存在: {model_exists}")
         else:
+            logging.debug("进度文件中未找到模型路径")
+    
+        # 自动恢复逻辑
+        resume_training = not args.no_resume and model_exists and last_epoch > 0
+        original_epochs = progress.get('original_epochs', config.get('epochs', 10))
+
+        # 询问用户是否继续上次训练
+        if resume_training:
+            logging.info(f"发现上次训练进度，从epoch {last_epoch+1} 开始")
+            try:
+                model = YOLO(str(saved_model_path), task='detect')
+                # 使用进度文件中的原始epoch数
+                logging.info(f"总训练epoch数: {original_epochs}")
+                logging.info(f"已完成epoch数: {last_epoch}")
+                remaining_epochs = original_epochs - last_epoch
+                logging.info(f"剩余训练epoch数: {remaining_epochs}")
+                # 确保剩余epoch数至少为1
+                if remaining_epochs <= 0:
+                    logging.warning(f"已完成所有训练epoch ({last_epoch}/{original_epochs})，将开始新的{original_epochs}轮训练")
+                    resume_training = False
+                else:
+                    config['epochs'] = remaining_epochs
+            except Exception as e:
+                logging.error(f"加载保存的模型失败: {e}")
+                resume_training = False
+    
+        if not resume_training:
             model_path = Path(config['model_path']) / config['weights']
             # 显式指定检测任务类型加载模型
             model = YOLO(str(model_path), task='detect')
@@ -262,9 +300,15 @@ def main():
         
         # 确保从配置文件中正确读取epochs值
         config_epochs = config.get('epochs', 10)
-        # 如果是继续训练，已经在上面调整过epochs值
+        # 计算训练epoch数
         if last_epoch > 0 and args.resume:
-            total_epochs = config['epochs']
+            # 继续训练时，设置为剩余epoch数
+            total_epochs = original_epochs - last_epoch
+            # 检查是否还有剩余epoch
+            if total_epochs <= 0:
+                logging.error(f"训练已完成，无法继续。总epoch数: {original_epochs}, 已完成: {last_epoch}")
+                return
+            logging.info(f"继续训练，剩余epoch数: {total_epochs}")
         else:
             total_epochs = config_epochs
         
@@ -297,9 +341,23 @@ def main():
                 self.stats = stats
                 self.save_interval = save_interval
                 self.save_intermediate = save_intermediate
+                self.best_metrics = stats.get('best_metrics', None)
 
             def on_epoch_end(self, epoch):
-                logging.info(f"完成第 {epoch + 1} 轮训练，正在保存进度...")
+                logging.info(f"完成第 {epoch + 1} 轮训练，正在评估模型...")
+                # 显式运行验证以更新最佳指标
+                metrics = self.model.val()
+                logging.info(f"本轮验证指标: {metrics}")
+                
+                # 更新最佳指标
+                current_map = metrics.box.map50 if hasattr(metrics, 'box') else metrics.map50
+                if self.best_metrics is None or current_map > self.best_metrics:
+                    self.model.best = metrics
+                    self.best_metrics = current_map
+                    self.stats['best_metrics'] = current_map
+                    logging.info(f"更新最佳指标: {current_map}")
+                
+                logging.info(f"正在保存进度...")
                 current_epoch = self.last_epoch + epoch + 1
                 # 每个epoch都保存模型
                 save_model_and_progress(self.model, current_epoch, self.last_epoch + self.total_epochs, self.start_time, self.stats, save_intermediate=self.save_intermediate)
@@ -341,7 +399,8 @@ def main():
                     exist_ok=True,
                     resume=last_epoch > 0,
                     plots=True,
-                    save_json=True
+                    save_json=True,
+                    val=True
                 )
             logging.debug(f"model.train()返回结果: {results}")
         except Exception as e:
@@ -443,10 +502,31 @@ def save_model_and_progress(model, epoch, total_epochs, start_time, stats, is_fi
     logging.info(f"已保存最新模型: {last_model_path}")
     
     # 保存最佳模型
-    if hasattr(model, 'best') and model.best:
+    # 保存最佳模型
+    # 获取当前验证指标
+    current_map = stats.get('best_metrics', 0)
+    try:
+        if hasattr(model, 'metrics'):
+            current_map = model.metrics.box.map50 if hasattr(model.metrics, 'box') else model.metrics.map50
+            logging.info(f"当前验证mAP50: {current_map}")
+    except Exception as e:
+        logging.warning(f"获取验证指标失败: {e}")
+    
+    # 确保第一轮训练后一定保存最佳模型
+    best_model_path = None
+    if not (model_dir / 'best.pt').exists():
         best_model_path = model_dir / 'best.pt'
         model.save(str(best_model_path))
-        logging.info(f"已更新最佳模型: {best_model_path}")
+        stats['best_metrics'] = current_map
+        stats['best_model_path'] = str(best_model_path)
+        logging.info(f"第一轮训练完成，保存初始最佳模型: {best_model_path}, mAP50: {current_map}")
+    # 后续轮次根据指标更新
+    elif current_map > stats.get('best_metrics', 0):
+        best_model_path = model_dir / 'best.pt'
+        model.save(str(best_model_path))
+        stats['best_metrics'] = current_map
+        stats['best_model_path'] = str(best_model_path)
+        logging.info(f"更新最佳模型: {best_model_path}, mAP50: {current_map}")
     
     # 保存中间模型
     intermediate_model_path = results_dir / f"intermediate_model_epoch_{epoch}.pt"

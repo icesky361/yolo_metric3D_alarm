@@ -1,0 +1,9 @@
+{
+    "last_epoch": 1,
+    "model_path": "yolo_seg_alarm\\train2_results\\intermediate_model_epoch_1.pt",
+    "stats": {
+      "epochs_completed": 1,
+      "time": 3299.268522500992,
+      "best_metrics": null
+    }
+  }
