@@ -163,59 +163,75 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
     # --- 5. 对所有图像进行推理（包括子文件夹） ---
     # 定义有效的图像文件扩展名
     valid_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
-    # 只获取有效的图像文件
-    image_files = [
-        file for file in source_path.rglob('*.*') 
-        if file.suffix.lower() in valid_extensions and file.is_file()
-    ]
-    
-    logger.info(f"找到 {len(image_files)} 张有效图像文件待处理（包括子文件夹）。")
-    if len(image_files) == 0:
-        logger.warning(f"在路径 {source_path} 及其子文件夹中未找到任何有效图像文件。")
-        logger.warning("请确保该路径包含图像文件（.jpg, .jpeg, .png, .bmp等），或使用 --source 参数指定包含图像的目录。")
-        return
+    def image_batch_generator(source_path, valid_extensions, batch_size=1000):
+        """生成器函数：分批加载图像路径，避免一次性加载所有路径"""
+        batch = []
+        for file in source_path.rglob('*.*'):
+            if file.suffix.lower() in valid_extensions and file.is_file():
+                batch.append(file)
+                if len(batch) >= batch_size:
+                    yield batch
+                    batch = []
+        if batch:  # 处理最后一批
+            yield batch
 
-    # 设置模型模式并只记录一次
-    model.mode = 'predict'
-    logger.info(f'推理前模型模式: {model.mode}')
-    
+    # 使用生成器分批获取图像路径
+    image_generator = image_batch_generator(source_path, valid_extensions, batch_size=5000)
+    batch_size = 32  # 推理批次大小（根据GPU显存调整）
+    logger.info(f"开始流式推理，每批预处理5000张图像路径，推理批次大小{batch_size}")
+
     try:
-        # 渐进式批量推理 - 将图像分成多个较小的批次
-        batch_size = 32# 根据RTX A4500 20GB显存调整的批量大小
-        total_batches = (len(image_files) + batch_size - 1) // batch_size
-        logger.info(f'开始渐进式批量推理，共 {len(image_files)} 张图像，每批 {batch_size} 张，总批次: {total_batches}')
-
-        # 处理批量推理结果（添加进度条）
         import time
         start_time = time.time()
         results = []
+        total_images = 0
+        batch_num = 0
 
         # 预热模型，减少首次推理开销
-        if len(image_files) > 0:
-            warmup_img = str(image_files[0])
-            with torch.no_grad():
-                model.predict(source=warmup_img, device=device, task='detect', batch=1, half=True, verbose=False)
-            logger.info('模型预热完成')
+        warmup_done = False
 
-        # 分批次处理图像
-        for batch_idx in range(total_batches):
-            start_idx = batch_idx * batch_size
-            end_idx = min(start_idx + batch_size, len(image_files))
-            batch_files = image_files[start_idx:end_idx]
-            batch_paths = [str(img_path) for img_path in batch_files]
+        # 流式处理图像批次
+        for image_batch in image_generator:
+            batch_num += 1
+            current_batch_size = len(image_batch)
+            total_images += current_batch_size
+            logger.info(f"处理路径批次 {batch_num}，包含 {current_batch_size} 张图像，累计 {total_images} 张")
 
-            # 记录批次开始时间
-            batch_start_time = time.time()
+            # 预热模型（仅在第一批图像时执行）
+            if not warmup_done and current_batch_size > 0:
+                warmup_img = str(image_batch[0])
+                with torch.no_grad():
+                    model.predict(source=warmup_img, device=device, task='detect', batch=1, half=True, verbose=False)
+                logger.info('模型预热完成')
+                warmup_done = True
 
-            # 对当前批次进行推理
-            with torch.no_grad():
-                logger.info(f'处理批次 {batch_idx+1}/{total_batches}，共 {len(batch_paths)} 张图像')
-                batch_results = model.predict(source=batch_paths, device=device, task='detect', batch=batch_size, half=True, verbose=False)
-                results.extend(batch_results)
+            # 将当前批次图像路径转换为字符串列表
+            batch_paths = [str(img_path) for img_path in image_batch]
+            total_sub_batches = (current_batch_size + batch_size - 1) // batch_size
 
-            # 记录批次结束时间
-            batch_elapsed = time.time() - batch_start_time
-            logger.info(f'批次 {batch_idx+1}/{total_batches} 处理完成，耗时 {batch_elapsed:.2f} 秒，每秒处理 {len(batch_paths)/batch_elapsed:.2f} 张图像')
+            # 分推理批次处理当前路径批次
+            for sub_batch_idx in range(total_sub_batches):
+                sub_start = sub_batch_idx * batch_size
+                sub_end = min(sub_start + batch_size, current_batch_size)
+                sub_batch_paths = batch_paths[sub_start:sub_end]
+                sub_batch_num = (batch_num - 1) * total_sub_batches + sub_batch_idx + 1
+
+                # 记录子批次开始时间
+                sub_start_time = time.time()
+
+                # 对当前子批次进行推理
+                with torch.no_grad():
+                    logger.info(f'处理推理子批次 {sub_batch_num}，共 {len(sub_batch_paths)} 张图像')
+                    sub_results = model.predict(source=sub_batch_paths, device=device, task='detect', batch=batch_size, half=True, verbose=False)
+                    results.extend(sub_results)
+
+                # 记录子批次结束时间
+                sub_elapsed = time.time() - sub_start_time
+                logger.info(f'推理子批次 {sub_batch_num} 处理完成，耗时 {sub_elapsed:.2f} 秒，每秒处理 {len(sub_batch_paths)/sub_elapsed:.2f} 张图像')
+
+            # 清理内存
+            del batch_paths
+            torch.cuda.empty_cache() if device.type == 'cuda' else None
 
         # 处理所有推理结果
         logger.info(f'所有批次推理完成，开始处理结果')
