@@ -53,9 +53,17 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 from utils.environment import get_device_and_adjust_config
 
 # 获取进度文件路径
+def get_writable_dir(path):
+    from pathlib import Path
+    dir_path = Path(path)
+    dir_path.mkdir(parents=True, exist_ok=True)
+    return str(dir_path)
+
 def get_progress_file_path():
     current_dir = Path(__file__).parent
-    progress_dir = current_dir / 'progress'
+    # 使用可写的进度目录
+    progress_dir = Path(get_writable_dir(str(current_dir / 'progress')))
+    logging.info(f"使用进度文件目录: {progress_dir}")
     progress_dir.mkdir(exist_ok=True)
     return progress_dir / 'train_progress.json'
 
@@ -82,6 +90,10 @@ def load_progress():
 
 # 保存进度
 def save_progress(last_epoch, model_path, stats):
+    # 确保使用可写目录
+    progress_file = Path(get_writable_dir(str(Path(__file__).parent / 'progress'))) / 'train_progress.json'
+    logging.debug(f"保存进度到: {progress_file}")
+    logging.debug(f"保存进度: last_epoch={last_epoch}, model_path={model_path}, stats={stats}")
     progress_file = get_progress_file_path()
     progress_data = {
         'last_epoch': last_epoch,
@@ -141,7 +153,9 @@ def prepare_data_paths(config):
 # 保存模型并更新进度
 def save_model_and_progress(model, epoch, total_epochs, start_time, stats, is_final=False):
     # 定义模型保存目录
-    model_dir = Path(__file__).parent.parent / 'models' / 'weights'
+    # 使用可写的模型保存目录
+    model_dir = Path(get_writable_dir(str(Path(__file__).parent.parent / 'models' / 'weights')))
+    logging.info(f"使用模型保存目录: {model_dir}")
     model_dir.mkdir(parents=True, exist_ok=True)
     
     # 定义训练结果目录
@@ -282,6 +296,7 @@ def main():
                 self.save_interval = save_interval
                 
             def on_epoch_end(self, epoch):
+                logging.info(f"完成第 {epoch + 1} 轮训练，正在保存进度...")
                 current_epoch = self.last_epoch + epoch + 1
                 # 定期保存进度和模型
                 if (epoch + 1) % self.save_interval == 0 or epoch == self.total_epochs - 1:
@@ -292,8 +307,26 @@ def main():
         # 注册回调函数
         model.add_callback('on_epoch_end', callback.on_epoch_end)
         
+        # 检查并设置可写的项目目录
+        def get_writable_dir(base_dir, fallback_dir=None):
+            if not fallback_dir:
+                fallback_dir = Path.home() / 'yolo_seg_alarm_train'
+            fallback_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                test_file = Path(base_dir) / 'test_write_permission.tmp'
+                test_file.write_text('test')
+                test_file.unlink()
+                return base_dir
+            except PermissionError:
+                logging.warning(f"目录 {base_dir} 无写入权限，使用 fallback 目录: {fallback_dir}")
+                return str(fallback_dir)
+
+        project_dir = get_writable_dir('yolo_seg_alarm')
+        logging.info(f"使用训练结果目录: {project_dir}")
+
         try:
             # 使用YOLO内置的多epoch训练功能
+            logging.debug(f"调用model.train()参数: epochs={total_epochs}, resume={last_epoch > 0}")
             results = model.train(
                     task=args.task,
                     data=config_path,
@@ -301,25 +334,56 @@ def main():
                     batch=config['batch'],
                     imgsz=config['imgsz'],
                     device=device.type,
-                    project='yolo_seg_alarm',
+                    project=project_dir,
                     name='train2_results',
                     exist_ok=True,
                     resume=last_epoch > 0,
                     plots=True,
                     save_json=True
                 )
+            logging.debug(f"model.train()返回结果: {results}")
         except Exception as e:
             # 获取当前训练到的epoch数
             current_epoch = last_epoch + getattr(model, 'epoch', 0) + 1
             logging.error(f"训练epoch {current_epoch}时出错: {e}")
             # 保存进度
             save_model_and_progress(model, current_epoch, last_epoch + total_epochs, start_time, stats)
-            return  # 训练失败，退出函数
+            logging.error(f"训练中断于epoch {current_epoch}，错误类型: {type(e).__name__}，错误信息: {str(e)}")
+            # 判断是否为可恢复错误
+            # 扩展可恢复错误类型，包括文件写入错误
+            if isinstance(e, (PermissionError, OSError)) and 'Permission denied' not in str(e):
+                logging.info(f"尝试从epoch {current_epoch + 1} 继续训练...")
+                remaining_epochs = total_epochs - current_epoch
+                if remaining_epochs > 0:
+                    # 确保所有后续文件操作使用可写目录
+                    progress_dir = Path(get_writable_dir(str(current_dir / 'progress')))
+                    model_dir = Path(get_writable_dir(str(Path(__file__).parent.parent / 'models' / 'weights')))
+                    logging.info(f"更新可写目录 - 进度: {progress_dir}, 模型: {model_dir}")
+                    logging.debug(f"恢复训练调用参数: remaining_epochs={remaining_epochs}")
+                    results = model.train(
+                        task=args.task,
+                        data=config_path,
+                        epochs=remaining_epochs,
+                          batch=config['batch'],
+                          imgsz=config['imgsz'],
+                          device=device.type,
+                          project=project_dir,
+                          name='train2_results',
+                          exist_ok=True,
+                          resume=True,
+                          plots=True,
+                          save_json=True
+                      )
+                logging.debug(f"恢复训练返回结果: {results}")
+            else:
+                logging.error("遇到不可恢复的错误，终止训练")
+                return  # 仅在严重错误时退出
         else:
-            # 只有训练成功完成时才保存最终模型和进度
-            save_model_and_progress(model, last_epoch + total_epochs, last_epoch + total_epochs, start_time, stats, is_final=True)
-            # 训练完成后保留最终进度
-            save_progress(last_epoch + total_epochs, None, stats)
+              # 只有训练成功完成时才保存最终模型和进度
+              save_model_and_progress(model, last_epoch + total_epochs, last_epoch + total_epochs, start_time, stats, is_final=True)
+              # 训练完成后保留最终进度
+              save_progress(last_epoch + total_epochs, None, stats)
+              logging.info(f"训练完成！总训练轮次: {total_epochs}，实际完成轮次: {last_epoch + total_epochs}")
         
         # 清理临时文件
         import shutil
@@ -356,9 +420,6 @@ def main():
         raise
     
     print("训练完成，模型已保存并清理临时文件")
-
-# 已在文件开头导入time模块，此处无需重复导入
-
 
 if __name__ == '__main__':
     main()
