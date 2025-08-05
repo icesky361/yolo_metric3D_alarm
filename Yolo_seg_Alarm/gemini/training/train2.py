@@ -153,7 +153,7 @@ def prepare_data_paths(config):
     return train_path, val_path
 
 # 保存模型并更新进度
-def save_model_and_progress(model, epoch, total_epochs, start_time, stats, is_final=False, save_intermediate=False):
+def save_model_and_progress(model, epoch, total_epochs, start_time, stats, original_epochs, save_intermediate=False, is_final=False):
     # 定义模型保存目录
     # 使用可写的模型保存目录
     model_dir = Path(get_writable_dir(str(Path(__file__).parent.parent / 'models' / 'weights')))
@@ -301,16 +301,18 @@ def main():
         # 确保从配置文件中正确读取epochs值
         config_epochs = config.get('epochs', 10)
         # 计算训练epoch数
+        original_epochs = config.get('epochs', 10)
         if last_epoch > 0 and args.resume:
             # 继续训练时，设置为剩余epoch数
-            total_epochs = original_epochs - last_epoch
+            remaining_epochs = original_epochs - last_epoch
             # 检查是否还有剩余epoch
-            if total_epochs <= 0:
+            if remaining_epochs <= 0:
                 logging.error(f"训练已完成，无法继续。总epoch数: {original_epochs}, 已完成: {last_epoch}")
                 return
+            total_epochs = remaining_epochs
             logging.info(f"继续训练，剩余epoch数: {total_epochs}")
         else:
-            total_epochs = config_epochs
+            total_epochs = original_epochs
         
         # 确保epochs是整数且大于0
         if not isinstance(total_epochs, int) or total_epochs <= 0:
@@ -408,7 +410,7 @@ def main():
             current_epoch = last_epoch + getattr(model, 'epoch', 0) + 1
             logging.error(f"训练epoch {current_epoch}时出错: {e}")
             # 保存进度
-            save_model_and_progress(model, current_epoch, last_epoch + total_epochs, start_time, stats)
+            save_model_and_progress(model, current_epoch, last_epoch + total_epochs, start_time, stats, original_epochs, save_intermediate=self.save_intermediate)
             logging.error(f"训练中断于epoch {current_epoch}，错误类型: {type(e).__name__}，错误信息: {str(e)}")
             # 判断是否为可恢复错误
             # 扩展可恢复错误类型，包括文件写入错误
@@ -441,7 +443,7 @@ def main():
                 return  # 仅在严重错误时退出
         else:
               # 只有训练成功完成时才保存最终模型和进度
-              save_model_and_progress(model, last_epoch + total_epochs, last_epoch + total_epochs, start_time, stats, is_final=True, save_intermediate=args.save_intermediate)
+              save_model_and_progress(model, last_epoch + total_epochs, last_epoch + total_epochs, start_time, stats, original_epochs, is_final=True, save_intermediate=args.save_intermediate)
               # 训练完成后保留最终进度
               save_progress(last_epoch + total_epochs, None, stats)
               logging.info(f"训练完成！总训练轮次: {total_epochs}，实际完成轮次: {last_epoch + total_epochs}")
