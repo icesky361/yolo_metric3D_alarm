@@ -28,47 +28,47 @@ def load_config(config_path):
     return config
 
 # 2. 准备数据集路径
- def prepare_data_paths(config):
-     base_path = Path(config['path'])
+def prepare_data_paths(config):
+    base_path = Path(config['path'])
 
-     # 设置训练集和验证集路径（标签文件与图片同目录）
-     train_path = base_path / 'train' / 'images'
-     val_path = base_path / 'val' / 'images'
+    # 设置训练集和验证集路径（标签文件与图片同目录）
+    train_path = base_path / 'train' / 'images'
+    val_path = base_path / 'val' / 'images'
 
-     print(f"最终训练集路径: {train_path}")
-     print(f"最终验证集路径: {val_path}")
+    print(f"最终训练集路径: {train_path}")
+    print(f"最终验证集路径: {val_path}")
 
-     # 验证路径是否存在
-     if not train_path.exists() or not val_path.exists():
-         raise FileNotFoundError(f"数据集路径不存在: {train_path} 或 {val_path}")
+    # 验证路径是否存在
+    if not train_path.exists() or not val_path.exists():
+        raise FileNotFoundError(f"数据集路径不存在: {train_path} 或 {val_path}")
 
-     return train_path, val_path
+    return train_path, val_path
 
 # 保存训练进度
- def save_progress(epoch, model, results, config, save_best=True):
-     progress = {
-         'epoch': epoch,
-         'best_epoch': results.best_epoch,
-         'best_map': float(results.best_map),
-         'last_epoch': results.epoch,
-         'timestamp': datetime.now().isoformat()
-     }
+def save_progress(epoch, model, results, config, save_best=True):
+    progress = {
+        'epoch': epoch,
+        'best_epoch': results.best_epoch,
+        'best_map': float(results.best_map),
+        'last_epoch': results.epoch,
+        'timestamp': datetime.now().isoformat()
+    }
 
-     # 保存进度文件
-     with open(PROGRESS_FILE, 'w', encoding='utf-8') as f:
-         json.dump(progress, f, ensure_ascii=False, indent=2)
+    # 保存进度文件
+    with open(PROGRESS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(progress, f, ensure_ascii=False, indent=2)
 
-     # 保存最后一轮模型（每轮更新）
-     last_model_path = PROGRESS_DIR / 'last.pt'
-     model.save(last_model_path)
+    # 保存最后一轮模型（每轮更新）
+    last_model_path = PROGRESS_DIR / 'last.pt'
+    model.save(last_model_path)
 
-     # 保存当前最佳模型（仅当性能提升时）
-     if save_best and (results.best_epoch == epoch or epoch == 0):
-         best_model_path = PROGRESS_DIR / 'best.pt'
-         model.save(best_model_path)
-         print(f"已更新最佳模型到 {best_model_path}")
+    # 保存当前最佳模型（仅当性能提升时）
+    if save_best and (results.best_epoch == epoch or epoch == 0):
+        best_model_path = PROGRESS_DIR / 'best.pt'
+        model.save(best_model_path)
+        print(f"已更新最佳模型到 {best_model_path}")
 
-     print(f"已保存第 {epoch} 轮进度和最后模型到 {PROGRESS_DIR}")
+    print(f"已保存第 {epoch} 轮进度和最后模型到 {PROGRESS_DIR}")
 
 # 加载训练进度
 def load_progress():
@@ -131,13 +131,13 @@ def main():
                     print("未找到last.pt，尝试加载checkpoint...")
                     args.load_last = False
              
-             if not args.load_last:
-                 checkpoint_path = PROGRESS_DIR / f'checkpoint_epoch_{progress["epoch"]}.pt'
-                 if checkpoint_path.exists():
-                     model = YOLO(str(checkpoint_path), task='detect')
-                     print(f"已从第 {progress['epoch']} 轮checkpoint继续训练")
-                 else:
-                     print(f"未找到 checkpoint 文件，将从头开始训练")
+            if not args.load_last:
+                checkpoint_path = PROGRESS_DIR / f'checkpoint_epoch_{progress["epoch"]}.pt'
+                if checkpoint_path.exists():
+                    model = YOLO(str(checkpoint_path), task='detect')
+                    print(f"已从第 {progress['epoch']} 轮checkpoint继续训练")
+                else:
+                    print(f"未找到 checkpoint 文件，将从头开始训练")
         else:
             print("未找到进度文件，将从头开始训练")
 
