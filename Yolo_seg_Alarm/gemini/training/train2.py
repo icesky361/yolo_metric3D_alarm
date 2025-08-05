@@ -151,7 +151,7 @@ def prepare_data_paths(config):
     return train_path, val_path
 
 # 保存模型并更新进度
-def save_model_and_progress(model, epoch, total_epochs, start_time, stats, is_final=False):
+def save_model_and_progress(model, epoch, total_epochs, start_time, stats, is_final=False, save_intermediate=False):
     # 定义模型保存目录
     # 使用可写的模型保存目录
     model_dir = Path(get_writable_dir(str(Path(__file__).parent.parent / 'models' / 'weights')))
@@ -162,27 +162,28 @@ def save_model_and_progress(model, epoch, total_epochs, start_time, stats, is_fi
     results_dir = Path('yolo_seg_alarm') / 'train2_results'
     results_dir.mkdir(parents=True, exist_ok=True)
     
-    # 保存当前模型
-    if is_final:
-        model_path = model_dir / 'last.pt'
-    else:
-        model_path = results_dir / f"intermediate_model_epoch_{epoch}.pt"
+    # 每个epoch都保存last.pt
+    last_model_path = model_dir / 'last.pt'
+    model.save(str(last_model_path))
+    logging.info(f"已保存最新模型: {last_model_path}")
     
-    model.save(str(model_path))
-    logging.info(f"已保存{'最终' if is_final else '中间'}模型: {model_path}")
+    # 保存最佳模型
+    if hasattr(model, 'best') and model.best:
+        best_model_path = model_dir / 'best.pt'
+        model.save(str(best_model_path))
+        logging.info(f"已更新最佳模型: {best_model_path}")
     
-    # 如果是最终模型，同时保存最佳模型和指定名称模型
+    # 保存中间模型（如果启用）
+    if save_intermediate:
+        intermediate_model_path = results_dir / f"intermediate_model_epoch_{epoch}.pt"
+        model.save(str(intermediate_model_path))
+        logging.info(f"已保存中间模型: {intermediate_model_path}")
+    
+    # 如果是最终模型，保存为指定名称的最终模型
     if is_final:
-        # 保存为指定名称的最终模型
         final_model_path = model_dir / 'yolo_seg_alarm_train2.pt'
         model.save(str(final_model_path))
         logging.info(f"已保存最终模型: {final_model_path}")
-        
-        # 如果有最佳模型，保存最佳模型
-        if hasattr(model, 'best') and model.best:
-            best_model_path = model_dir / 'best.pt'
-            model.save(str(best_model_path))
-            logging.info(f"已保存最佳模型: {best_model_path}")
     
     # 更新统计信息
     stats['epochs_completed'] = epoch
@@ -197,9 +198,9 @@ def save_model_and_progress(model, epoch, total_epochs, start_time, stats, is_fi
         logging.warning(f"无法获取最佳指标: {e}")
     
     # 保存进度
-    save_progress(epoch, str(model_path), stats)
+    save_progress(epoch, str(last_model_path), stats)
     
-    return model_path
+    return last_model_path
 
 # 主训练函数
 def main():
@@ -228,6 +229,7 @@ def main():
         parser.add_argument('--task', type=str, default='detect', help='任务类型')
         parser.add_argument('--save_interval', type=int, default=5, help='每隔多少个epoch保存一次进度')
         parser.add_argument('--resume', action='store_true', help='是否从上次进度继续训练')
+        parser.add_argument('--save_intermediate', action='store_true', help='是否保存中间模型')
         args = parser.parse_args()
         
         # 在模型加载代码前强制设置任务类型
@@ -287,23 +289,23 @@ def main():
         
         # 配置训练回调函数用于进度保存
         class ProgressCallback:
-            def __init__(self, model, total_epochs, last_epoch, start_time, stats, save_interval):
+            def __init__(self, model, total_epochs, last_epoch, start_time, stats, save_interval, save_intermediate):
                 self.model = model
                 self.total_epochs = total_epochs
                 self.last_epoch = last_epoch
                 self.start_time = start_time
                 self.stats = stats
                 self.save_interval = save_interval
-                
+                self.save_intermediate = save_intermediate
+
             def on_epoch_end(self, epoch):
                 logging.info(f"完成第 {epoch + 1} 轮训练，正在保存进度...")
                 current_epoch = self.last_epoch + epoch + 1
-                # 定期保存进度和模型
-                if (epoch + 1) % self.save_interval == 0 or epoch == self.total_epochs - 1:
-                    save_model_and_progress(self.model, current_epoch, self.last_epoch + self.total_epochs, self.start_time, self.stats)
+                # 每个epoch都保存模型
+                save_model_and_progress(self.model, current_epoch, self.last_epoch + self.total_epochs, self.start_time, self.stats, save_intermediate=self.save_intermediate)
                 
         # 创建回调实例
-        callback = ProgressCallback(model, total_epochs, last_epoch, start_time, stats, args.save_interval)
+        callback = ProgressCallback(model, total_epochs, last_epoch, start_time, stats, args.save_interval, args.save_intermediate)
         # 注册回调函数
         model.add_callback('on_epoch_end', callback.on_epoch_end)
         
@@ -380,7 +382,7 @@ def main():
                 return  # 仅在严重错误时退出
         else:
               # 只有训练成功完成时才保存最终模型和进度
-              save_model_and_progress(model, last_epoch + total_epochs, last_epoch + total_epochs, start_time, stats, is_final=True)
+              save_model_and_progress(model, last_epoch + total_epochs, last_epoch + total_epochs, start_time, stats, is_final=True, save_intermediate=args.save_intermediate)
               # 训练完成后保留最终进度
               save_progress(last_epoch + total_epochs, None, stats)
               logging.info(f"训练完成！总训练轮次: {total_epochs}，实际完成轮次: {last_epoch + total_epochs}")
@@ -423,3 +425,53 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+def save_model_and_progress(model, epoch, total_epochs, start_time, stats, is_final=False):
+    # 定义模型保存目录
+    # 使用可写的模型保存目录
+    model_dir = Path(get_writable_dir(str(Path(__file__).parent.parent / 'models' / 'weights')))
+    logging.info(f"使用模型保存目录: {model_dir}")
+    model_dir.mkdir(parents=True, exist_ok=True)
+    
+    # 定义训练结果目录
+    results_dir = Path('yolo_seg_alarm') / 'train2_results'
+    results_dir.mkdir(parents=True, exist_ok=True)
+    
+    # 每个epoch都保存last.pt
+    last_model_path = model_dir / 'last.pt'
+    model.save(str(last_model_path))
+    logging.info(f"已保存最新模型: {last_model_path}")
+    
+    # 保存最佳模型
+    if hasattr(model, 'best') and model.best:
+        best_model_path = model_dir / 'best.pt'
+        model.save(str(best_model_path))
+        logging.info(f"已更新最佳模型: {best_model_path}")
+    
+    # 保存中间模型
+    intermediate_model_path = results_dir / f"intermediate_model_epoch_{epoch}.pt"
+    model.save(str(intermediate_model_path))
+    logging.info(f"已保存中间模型: {intermediate_model_path}")
+    
+    # 如果是最终模型，保存为指定名称的最终模型
+    if is_final:
+        final_model_path = model_dir / 'yolo_seg_alarm_train2.pt'
+        model.save(str(final_model_path))
+        logging.info(f"已保存最终模型: {final_model_path}")
+    
+    # 更新统计信息
+    stats['epochs_completed'] = epoch
+    stats['time'] = time.time() - start_time
+    
+    # 尝试获取最佳指标
+    try:
+        if hasattr(model, 'best') and model.best:
+            stats['best_metrics'] = model.best.tojson()
+            logging.info(f"当前最佳指标: {model.best}")
+    except Exception as e:
+        logging.warning(f"无法获取最佳指标: {e}")
+    
+    # 保存进度
+    save_progress(epoch, str(last_model_path), stats)
+    
+    return last_model_path
