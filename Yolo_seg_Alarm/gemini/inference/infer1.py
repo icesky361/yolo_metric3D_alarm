@@ -322,8 +322,6 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 batch_results_df = pd.DataFrame(current_results_data)
                 # 清理当前批次数据
                 current_results_data.clear()
-                results.clear()
-                image_files.clear()
 
                 # 聚合当前批次结果
                 agg_functions = {
@@ -336,26 +334,20 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 # 填充空值
                 batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']] = batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']].fillna('No Detection')
 
-                # 增量保存到Excel
-                try:
-                    # 如果文件不存在则创建并写入表头，否则追加
-                    if not output_excel_path.exists():
-                        batch_agg_df.to_excel(output_excel_path, index=False)
-                    else:
-                        with pd.ExcelWriter(output_excel_path, mode='a', if_sheet_exists='overlay', engine='openpyxl') as writer:
-                            # 获取现有数据的最后一行
-                            startrow = writer.sheets['Sheet1'].max_row
-                            batch_agg_df.to_excel(writer, index=False, startrow=startrow, header=False)
-                    logger.info(f"路径批次 {batch_num} 结果已保存至: {output_excel_path.resolve()}")
-                except Exception as e:
-                    logger.error(f"保存Excel文件失败: {e}")
-
-                # 深度清理当前批次内存
+                # 将批次结果添加到全局结果
+                results.append(batch_agg_df)
+                # 保存批次结果到Excel
+                if batch_num == 1:
+                    with pd.ExcelWriter(output_excel_path, engine='openpyxl', mode='w') as writer:
+                        batch_agg_df.to_excel(writer, index=False, sheet_name=f'Batch_{batch_num}')
+                else:
+                    with pd.ExcelWriter(output_excel_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
+                        batch_agg_df.to_excel(writer, index=False, sheet_name=f'Batch_{batch_num}')
+                logger.info(f'路径批次 {batch_num} 结果已保存至: {output_excel_path}')
+                # 清理变量和内存
                 del batch_results_df, batch_agg_df
-                torch.cuda.empty_cache() if device.type == 'cuda' else None
+                torch.cuda.empty_cache()
                 gc.collect()
-            # 清理当前批次数据
-            current_results_data.clear()
             results.clear()
             image_files.clear()
             results.clear()
