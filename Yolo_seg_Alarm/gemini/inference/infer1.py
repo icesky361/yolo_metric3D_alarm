@@ -108,7 +108,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
     """
     # --- 1. 初始化设置 ---
     device = get_device()
-    source_path = Path(source_dir) / 'images' # 图片文件夹路径
+    source_path = Path(source_dir) / 'images' # 修复路径：指向用户实际图片目录images子文件夹
     # 确保输出目录存在
     output_dir = Path('results')
     output_dir.mkdir(exist_ok=True)
@@ -176,14 +176,21 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             yield batch
 
     # 使用生成器分批获取图像路径
-    image_generator = image_batch_generator(source_path, valid_extensions, batch_size=5000)
-    batch_size = 32  # 推理批次大小（根据GPU显存调整）
+    image_generator = image_batch_generator(source_path, valid_extensions, batch_size=250)  # 进一步减小路径批次至250张/批
+    batch_size = 8  # 进一步减小推理批次大小至8（从16调整）
     logger.info(f"开始流式推理，每批预处理5000张图像路径，推理批次大小{batch_size}")
 
     try:
         import time
         start_time = time.time()
-        results = []
+        results = []  # 每个路径批次独立初始化结果列表
+        current_results_data = {  # 批次独立的结果数据
+            'original_image_name': [],
+            'annotated_image_name': [],
+            'pred_class': [],
+            'confidence': [],
+            'bbox_xyxy': []
+        }
         total_images = 0
         batch_num = 0
 
@@ -191,11 +198,20 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
         warmup_done = False
 
         # 流式处理图像批次
-        for image_batch in image_generator:
+        image_files = []  # 存储所有图像路径
+            # 获取当前进程ID
+            process = psutil.Process(os.getpid())
+            # 确保在每个批次开始时重新获取进程信息以避免缓存问题
+            process = psutil.Process(os.getpid())
+            for image_batch in image_generator:
             batch_num += 1
             current_batch_size = len(image_batch)
             total_images += current_batch_size
-            logger.info(f"处理路径批次 {batch_num}，包含 {current_batch_size} 张图像，累计 {total_images} 张")
+            # 记录批次开始时的内存使用
+            mem_before = process.memory_info().rss / 1024 / 1024  # MB
+            logger.info(f"处理路径批次 {batch_num}，包含 {current_batch_size} 张图像，累计 {total_images} 张，内存使用: {mem_before:.2f}MB")
+            # 将当前批次的图像路径添加到总列表中
+            image_files.extend(image_batch)
 
             # 预热模型（仅在第一批图像时执行）
             if not warmup_done and current_batch_size > 0:
@@ -226,15 +242,27 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                     results.extend(sub_results)
 
                 # 记录子批次结束时间
-                sub_elapsed = time.time() - sub_start_time
-                logger.info(f'推理子批次 {sub_batch_num} 处理完成，耗时 {sub_elapsed:.2f} 秒，每秒处理 {len(sub_batch_paths)/sub_elapsed:.2f} 张图像')
-
-            # 清理内存
-            del batch_paths
+            sub_elapsed = time.time() - sub_start_time
+            logger.info(f'推理子批次 {sub_batch_num} 处理完成，耗时 {sub_elapsed:.2f} 秒，每秒处理 {len(sub_batch_paths)/sub_elapsed:.2f} 张图像')
+            # 子批次处理后立即清理中间变量
+            del sub_results
             torch.cuda.empty_cache() if device.type == 'cuda' else None
+            gc.collect()
 
-        # 处理所有推理结果
-        logger.info(f'所有批次推理完成，开始处理结果')
+            # 记录批次结束时的内存使用
+                mem_after = process.memory_info().rss / 1024 / 1024  # MB
+                logger.info(f'路径批次 {batch_num} 处理完成，内存使用: {mem_after:.2f}MB，内存变化: {mem_after - mem_before:.2f}MB')
+                # 清理内存
+                del batch_paths, sub_batch_paths, sub_results
+                torch.cuda.empty_cache() if device.type == 'cuda' else None
+                # 强制Python垃圾回收释放内存
+                import gc
+                gc.collect()
+
+        # 处理当前路径批次的推理结果
+        logger.info(f'路径批次 {batch_num} 推理完成，开始处理结果')
+        # 确保results和image_files长度匹配
+        assert len(results) == len(image_files), f"推理结果数量({len(results)})与图像数量({len(image_files)})不匹配"
         for i, res in enumerate(tqdm(results, desc="正在处理推理结果")):
             img_path = image_files[i]
             # 每处理50张图像更新一次进度时间信息
@@ -247,7 +275,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             names = res.names
 
             # 读取原始图像，保持色彩信息
-            original_image = Image.open(img_path).convert('RGB')
+            with Image.open(img_path).convert('RGB') as original_image:  # 使用with语句确保图像文件正确关闭
             original_array = np.array(original_image)
 
             # 生成标注图像
@@ -292,29 +320,38 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
         logger.warning("在任何图片中都未检测到目标。")
         return
 
-    # 从收集的结果创建一个新的DataFrame
-    results_df = pd.DataFrame(results_data)
+    # 从当前批次收集的结果创建DataFrame
+        batch_results_df = pd.DataFrame(current_results_data)
 
-    # 由于一张图片可能检测到多个目标，我们需要对结果进行聚合
-    # 我们将按原始图片名称和标注图片名称分组，并用分号连接结果
-    agg_functions = {
-        'pred_class': lambda x: '; '.join(x),
-        'confidence': lambda x: '; '.join(map(str, x)),
-        'bbox_xyxy': lambda x: '; '.join(x)
-    }
-    results_agg_df = results_df.groupby(['original_image_name', 'annotated_image_name']).agg(agg_functions).reset_index()
+        # 聚合当前批次结果
+        agg_functions = {
+            'pred_class': lambda x: '; '.join(x),
+            'confidence': lambda x: '; '.join(map(str, x)),
+            'bbox_xyxy': lambda x: '; '.join(x)
+        }
+        batch_agg_df = batch_results_df.groupby(['original_image_name', 'annotated_image_name']).agg(agg_functions).reset_index()
 
-    # 为没有检测到目标的图片填充'No Detection'
-    results_agg_df[['pred_class', 'confidence', 'bbox_xyxy']] = results_agg_df[['pred_class', 'confidence', 'bbox_xyxy']].fillna('No Detection')
+        # 填充空值
+        batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']] = batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']].fillna('No Detection')
 
-    # 使用结果数据作为最终DataFrame
-    final_df = results_agg_df
+        # 增量保存到Excel
+        try:
+            # 如果文件不存在则创建并写入表头，否则追加
+            if not output_excel_path.exists():
+                batch_agg_df.to_excel(output_excel_path, index=False)
+            else:
+                with pd.ExcelWriter(output_excel_path, mode='a', if_sheet_exists='overlay', engine='openpyxl') as writer:
+                    # 获取现有数据的最后一行
+                    startrow = writer.sheets['Sheet1'].max_row
+                    batch_agg_df.to_excel(writer, index=False, startrow=startrow, header=False)
+            logger.info(f"路径批次 {batch_num} 结果已保存至: {output_excel_path.resolve()}")
+        except Exception as e:
+            logger.error(f"保存Excel文件失败: {e}")
 
-    try:
-        final_df.to_excel(output_excel_path, index=False)
-        logging.info(f"推理完成。结果已保存至: {output_excel_path.resolve()}")
-    except Exception as e:
-        logging.error(f"保存Excel文件失败: {e}")
+        # 清理当前批次内存
+        del batch_results_df, batch_agg_df, current_results_data
+        results.clear()
+        gc.collect()
 
 if __name__ == '__main__':
     # --- 命令行参数解析 ---
