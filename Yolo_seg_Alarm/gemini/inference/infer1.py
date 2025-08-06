@@ -248,9 +248,12 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             # 记录批次结束时的内存使用
             mem_after = process.memory_info().rss / 1024 / 1024  # MB
             logger.info(f'路径批次 {batch_num} 处理完成，内存使用: {mem_after:.2f}MB，内存变化: {mem_after - mem_before:.2f}MB')
-            # 清理内存
-            del batch_paths
-            torch.cuda.empty_cache() if device.type == 'cuda' else None
+            
+            # 彻底清理内存
+            del batch_paths  # 保留image_batch用于结果处理
+            if device.type == 'cuda':
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()  # 释放共享内存
             # 强制Python垃圾回收释放内存
             gc.collect()
 
@@ -265,11 +268,17 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             # 处理当前路径批次的推理结果
             logger.info(f'路径批次 {batch_num} 推理完成，开始处理结果')
             
+            # 传递当前批次图像路径到结果处理
+            current_image_batch = image_batch.copy()  # 创建副本保留路径信息
+            if not current_image_batch:
+                logger.error('当前批次图像路径为空')
+                return
+                
             # 只处理当前批次的推理结果
-            batch_results = results[-len(image_batch):]
+            batch_results = results[-len(current_image_batch):]
             
             for i, res in enumerate(tqdm(batch_results, desc="正在处理推理结果")):
-                img_path = image_batch[i]
+                img_path = current_image_batch[i]
                 # 每处理100张图像更新一次进度时间信息
                 if i % 100 == 0 and i > 0:
                     elapsed = time.time() - start_time
