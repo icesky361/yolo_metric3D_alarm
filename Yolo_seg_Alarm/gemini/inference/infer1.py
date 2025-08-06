@@ -315,14 +315,49 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                     current_results_data['bbox_xyxy'].append('')
 
             # --- 6. 将结果保存到Excel ---
-            if not results_data['original_image_name']:
-                logger.warning("在任何图片中都未检测到目标。")
-                return
+            if not current_results_data['original_image_name']:
+                logger.warning(f"路径批次 {batch_num} 未检测到任何目标，继续处理下一批次")
+            else:
+                # 从当前批次收集的结果创建DataFrame
+                batch_results_df = pd.DataFrame(current_results_data)
+                # 清理当前批次数据
+                current_results_data.clear()
+                results.clear()
+                image_files.clear()
 
-            # 从当前批次收集的结果创建DataFrame
-            batch_results_df = pd.DataFrame(current_results_data)
+                # 聚合当前批次结果
+                agg_functions = {
+                    'pred_class': lambda x: '; '.join(x),
+                    'confidence': lambda x: '; '.join(map(str, x)),
+                    'bbox_xyxy': lambda x: '; '.join(x)
+                }
+                batch_agg_df = batch_results_df.groupby(['original_image_name', 'annotated_image_name']).agg(agg_functions).reset_index()
+
+                # 填充空值
+                batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']] = batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']].fillna('No Detection')
+
+                # 增量保存到Excel
+                try:
+                    # 如果文件不存在则创建并写入表头，否则追加
+                    if not output_excel_path.exists():
+                        batch_agg_df.to_excel(output_excel_path, index=False)
+                    else:
+                        with pd.ExcelWriter(output_excel_path, mode='a', if_sheet_exists='overlay', engine='openpyxl') as writer:
+                            # 获取现有数据的最后一行
+                            startrow = writer.sheets['Sheet1'].max_row
+                            batch_agg_df.to_excel(writer, index=False, startrow=startrow, header=False)
+                    logger.info(f"路径批次 {batch_num} 结果已保存至: {output_excel_path.resolve()}")
+                except Exception as e:
+                    logger.error(f"保存Excel文件失败: {e}")
+
+                # 深度清理当前批次内存
+                del batch_results_df, batch_agg_df
+                torch.cuda.empty_cache() if device.type == 'cuda' else None
+                gc.collect()
             # 清理当前批次数据
             current_results_data.clear()
+            results.clear()
+            image_files.clear()
             results.clear()
             image_files.clear()
 
