@@ -78,6 +78,9 @@ from PIL import Image
 import logging
 import numpy as np
 from PIL import Image
+import psutil
+import gc
+import os
 
 # 配置日志记录器
 logging.basicConfig(
@@ -199,11 +202,10 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
 
         # 流式处理图像批次
         image_files = []  # 存储所有图像路径
-            # 获取当前进程ID
-            process = psutil.Process(os.getpid())
-            # 确保在每个批次开始时重新获取进程信息以避免缓存问题
-            process = psutil.Process(os.getpid())
-            for image_batch in image_generator:
+        # 获取当前进程ID
+        process = psutil.Process(os.getpid())
+        # 确保在每个批次开始时重新获取进程信息以避免缓存问题
+        for image_batch in image_generator:
             batch_num += 1
             current_batch_size = len(image_batch)
             total_images += current_batch_size
@@ -242,114 +244,113 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                     results.extend(sub_results)
 
                 # 记录子批次结束时间
-            sub_elapsed = time.time() - sub_start_time
-            logger.info(f'推理子批次 {sub_batch_num} 处理完成，耗时 {sub_elapsed:.2f} 秒，每秒处理 {len(sub_batch_paths)/sub_elapsed:.2f} 张图像')
-            # 子批次处理后立即清理中间变量
-            del sub_results
-            torch.cuda.empty_cache() if device.type == 'cuda' else None
-            gc.collect()
-
-            # 记录批次结束时的内存使用
-                mem_after = process.memory_info().rss / 1024 / 1024  # MB
-                logger.info(f'路径批次 {batch_num} 处理完成，内存使用: {mem_after:.2f}MB，内存变化: {mem_after - mem_before:.2f}MB')
-                # 清理内存
-                del batch_paths, sub_batch_paths, sub_results
+                sub_elapsed = time.time() - sub_start_time
+                logger.info(f'推理子批次 {sub_batch_num} 处理完成，耗时 {sub_elapsed:.2f} 秒，每秒处理 {len(sub_batch_paths)/sub_elapsed:.2f} 张图像')
+                # 子批次处理后立即清理中间变量
+                del sub_results
                 torch.cuda.empty_cache() if device.type == 'cuda' else None
-                # 强制Python垃圾回收释放内存
-                import gc
                 gc.collect()
 
-        # 处理当前路径批次的推理结果
-        logger.info(f'路径批次 {batch_num} 推理完成，开始处理结果')
-        # 确保results和image_files长度匹配
-        assert len(results) == len(image_files), f"推理结果数量({len(results)})与图像数量({len(image_files)})不匹配"
-        for i, res in enumerate(tqdm(results, desc="正在处理推理结果")):
-            img_path = image_files[i]
-            # 每处理50张图像更新一次进度时间信息
-            if i % 100 == 0 and i > 0:
-                elapsed = time.time() - start_time
-                remaining = (elapsed / i) * (len(results) - i)
-                logger.info(f"已处理 {i}/{len(results)} 张图像，耗时 {elapsed:.2f} 秒，预计剩余 {remaining:.2f} 秒")
-            
-            # 从模型结果中获取类别名称
-            names = res.names
+            # 记录批次结束时的内存使用
+            mem_after = process.memory_info().rss / 1024 / 1024  # MB
+            logger.info(f'路径批次 {batch_num} 处理完成，内存使用: {mem_after:.2f}MB，内存变化: {mem_after - mem_before:.2f}MB')
+            # 清理内存
+            del batch_paths
+            torch.cuda.empty_cache() if device.type == 'cuda' else None
+            # 强制Python垃圾回收释放内存
+            gc.collect()
 
-            # 读取原始图像，保持色彩信息
-            with Image.open(img_path).convert('RGB') as original_image:  # 使用with语句确保图像文件正确关闭
-            original_array = np.array(original_image)
+            # 处理当前路径批次的推理结果
+            logger.info(f'路径批次 {batch_num} 推理完成，开始处理结果')
+            # 确保results和image_files长度匹配
+            assert len(results) == len(image_files), f"推理结果数量({len(results)})与图像数量({len(image_files)})不匹配"
+            for i, res in enumerate(tqdm(results, desc="正在处理推理结果")):
+                img_path = image_files[i]
+                # 每处理50张图像更新一次进度时间信息
+                if i % 100 == 0 and i > 0:
+                    elapsed = time.time() - start_time
+                    remaining = (elapsed / i) * (len(results) - i)
+                    logger.info(f"已处理 {i}/{len(results)} 张图像，耗时 {elapsed:.2f} 秒，预计剩余 {remaining:.2f} 秒")
+                
+                # 从模型结果中获取类别名称
+                names = res.names
 
-            # 生成标注图像
-            annotated_image = res.plot(img=original_array)
+                # 读取原始图像，保持色彩信息
+                with Image.open(img_path).convert('RGB') as original_image:  # 使用with语句确保图像文件正确关闭
+                    original_array = np.array(original_image)
 
-            # 获取文件名和扩展名，添加_tl后缀
-            filename = img_path.stem
-            extension = img_path.suffix
-            new_filename = f"{filename}_tl{extension}"
+                # 生成标注图像
+                annotated_image = res.plot(img=original_array)
 
-            # 保存标注图像
-            Image.fromarray(annotated_image).save(output_images_path / new_filename)
+                # 获取文件名和扩展名，添加_tl后缀
+                filename = img_path.stem
+                extension = img_path.suffix
+                new_filename = f"{filename}_tl{extension}"
 
-            # 检查是否有检测到的边界框
-            if res.boxes is not None and len(res.boxes) > 0:
-                # 遍历每个检测到的边界框
-                for box in res.boxes:
-                    class_id = int(box.cls) # 类别ID
-                    confidence = float(box.conf) # 置信度
-                    bbox_coords = box.xyxy[0].cpu().numpy().astype(int).tolist() # 边界框坐标 [x1, y1, x2, y2]
-                    
-                    # 将结果添加到数据容器中
+                # 保存标注图像
+                Image.fromarray(annotated_image).save(output_images_path / new_filename)
+
+                # 检查是否有检测到的边界框
+                if res.boxes is not None and len(res.boxes) > 0:
+                    # 遍历每个检测到的边界框
+                    for box in res.boxes:
+                        class_id = int(box.cls) # 类别ID
+                        confidence = float(box.conf) # 置信度
+                        bbox_coords = box.xyxy[0].cpu().numpy().astype(int).tolist() # 边界框坐标 [x1, y1, x2, y2]
+                        
+                        # 将结果添加到数据容器中
+                        results_data['original_image_name'].append(img_path.name)
+                        results_data['annotated_image_name'].append(new_filename)
+                        results_data['pred_class'].append(names[class_id])
+                        results_data['confidence'].append(round(confidence, 4))
+                        results_data['bbox_xyxy'].append(",".join(map(str, bbox_coords)))
+                else:
+                    # 如果没有检测到边界框，也添加一条记录，但填充空值
                     results_data['original_image_name'].append(img_path.name)
                     results_data['annotated_image_name'].append(new_filename)
-                    results_data['pred_class'].append(names[class_id])
-                    results_data['confidence'].append(round(confidence, 4))
-                    results_data['bbox_xyxy'].append(",".join(map(str, bbox_coords)))
-            else:
-                # 如果没有检测到边界框，也添加一条记录，但填充空值
-                results_data['original_image_name'].append(img_path.name)
-                results_data['annotated_image_name'].append(new_filename)
-                results_data['pred_class'].append('未检测到')
-                results_data['confidence'].append(0.0)
-                results_data['bbox_xyxy'].append('')
+                    results_data['pred_class'].append('未检测到')
+                    results_data['confidence'].append(0.0)
+                    results_data['bbox_xyxy'].append('')
+
+            # --- 6. 将结果保存到Excel ---
+            if not results_data['original_image_name']:
+                logger.warning("在任何图片中都未检测到目标。")
+                return
+
+            # 从当前批次收集的结果创建DataFrame
+            batch_results_df = pd.DataFrame(current_results_data)
+
+            # 聚合当前批次结果
+            agg_functions = {
+                'pred_class': lambda x: '; '.join(x),
+                'confidence': lambda x: '; '.join(map(str, x)),
+                'bbox_xyxy': lambda x: '; '.join(x)
+            }
+            batch_agg_df = batch_results_df.groupby(['original_image_name', 'annotated_image_name']).agg(agg_functions).reset_index()
+
+            # 填充空值
+            batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']] = batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']].fillna('No Detection')
+
+            # 增量保存到Excel
+            try:
+                # 如果文件不存在则创建并写入表头，否则追加
+                if not output_excel_path.exists():
+                    batch_agg_df.to_excel(output_excel_path, index=False)
+                else:
+                    with pd.ExcelWriter(output_excel_path, mode='a', if_sheet_exists='overlay', engine='openpyxl') as writer:
+                        # 获取现有数据的最后一行
+                        startrow = writer.sheets['Sheet1'].max_row
+                        batch_agg_df.to_excel(writer, index=False, startrow=startrow, header=False)
+                logger.info(f"路径批次 {batch_num} 结果已保存至: {output_excel_path.resolve()}")
+            except Exception as e:
+                logger.error(f"保存Excel文件失败: {e}")
+
+            # 清理当前批次内存
+            del batch_results_df, batch_agg_df, current_results_data
 
     except Exception as e:
         logger.error(f"批量推理过程中发生错误: {e}", exc_info=True)
         torch.cuda.empty_cache()  # 清理GPU内存，防止内存溢出
-
-    # --- 6. 将结果保存到Excel ---
-    if not results_data['original_image_name']:
-        logger.warning("在任何图片中都未检测到目标。")
-        return
-
-    # 从当前批次收集的结果创建DataFrame
-        batch_results_df = pd.DataFrame(current_results_data)
-
-        # 聚合当前批次结果
-        agg_functions = {
-            'pred_class': lambda x: '; '.join(x),
-            'confidence': lambda x: '; '.join(map(str, x)),
-            'bbox_xyxy': lambda x: '; '.join(x)
-        }
-        batch_agg_df = batch_results_df.groupby(['original_image_name', 'annotated_image_name']).agg(agg_functions).reset_index()
-
-        # 填充空值
-        batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']] = batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']].fillna('No Detection')
-
-        # 增量保存到Excel
-        try:
-            # 如果文件不存在则创建并写入表头，否则追加
-            if not output_excel_path.exists():
-                batch_agg_df.to_excel(output_excel_path, index=False)
-            else:
-                with pd.ExcelWriter(output_excel_path, mode='a', if_sheet_exists='overlay', engine='openpyxl') as writer:
-                    # 获取现有数据的最后一行
-                    startrow = writer.sheets['Sheet1'].max_row
-                    batch_agg_df.to_excel(writer, index=False, startrow=startrow, header=False)
-            logger.info(f"路径批次 {batch_num} 结果已保存至: {output_excel_path.resolve()}")
-        except Exception as e:
-            logger.error(f"保存Excel文件失败: {e}")
-
-        # 清理当前批次内存
-        del batch_results_df, batch_agg_df, current_results_data
         results.clear()
         gc.collect()
 
