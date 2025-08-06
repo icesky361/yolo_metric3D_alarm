@@ -268,7 +268,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             assert len(results) == len(image_files), f"推理结果数量({len(results)})与图像数量({len(image_files)})不匹配"
             for i, res in enumerate(tqdm(results, desc="正在处理推理结果")):
                 img_path = image_files[i]
-                # 每处理50张图像更新一次进度时间信息
+                # 每处理100张图像更新一次进度时间信息
                 if i % 100 == 0 and i > 0:
                     elapsed = time.time() - start_time
                     remaining = (elapsed / i) * (len(results) - i)
@@ -321,37 +321,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 # 从当前批次收集的结果创建DataFrame
                 batch_results_df = pd.DataFrame(current_results_data)
                 # 清理当前批次数据
-                current_results_data.clear()
-
-                # 聚合当前批次结果
-                agg_functions = {
-                    'pred_class': lambda x: '; '.join(x),
-                    'confidence': lambda x: '; '.join(map(str, x)),
-                    'bbox_xyxy': lambda x: '; '.join(x)
-                }
-                batch_agg_df = batch_results_df.groupby(['original_image_name', 'annotated_image_name']).agg(agg_functions).reset_index()
-
-                # 填充空值
-                batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']] = batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']].fillna('No Detection')
-
-                # 将批次结果添加到全局结果
-                results.append(batch_agg_df)
-                # 保存批次结果到Excel
-                if batch_num == 1:
-                    with pd.ExcelWriter(output_excel_path, engine='openpyxl', mode='w') as writer:
-                        batch_agg_df.to_excel(writer, index=False, sheet_name=f'Batch_{batch_num}')
-                else:
-                    with pd.ExcelWriter(output_excel_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
-                        batch_agg_df.to_excel(writer, index=False, sheet_name=f'Batch_{batch_num}')
-                logger.info(f'路径批次 {batch_num} 结果已保存至: {output_excel_path}')
-                # 清理变量和内存
-                del batch_results_df, batch_agg_df
-                torch.cuda.empty_cache()
-                gc.collect()
-            results.clear()
-            image_files.clear()
-            results.clear()
-            image_files.clear()
+            current_results_data.clear()
 
             # 聚合当前批次结果
             agg_functions = {
@@ -361,31 +331,29 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             }
             batch_agg_df = batch_results_df.groupby(['original_image_name', 'annotated_image_name']).agg(agg_functions).reset_index()
 
-            # 填充空值
+             # 填充空值
             batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']] = batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']].fillna('No Detection')
 
-            # 增量保存到Excel
-            try:
-                # 如果文件不存在则创建并写入表头，否则追加
-                if not output_excel_path.exists():
-                    batch_agg_df.to_excel(output_excel_path, index=False)
-                else:
-                    with pd.ExcelWriter(output_excel_path, mode='a', if_sheet_exists='overlay', engine='openpyxl') as writer:
-                        # 获取现有数据的最后一行
-                        startrow = writer.sheets['Sheet1'].max_row
-                        batch_agg_df.to_excel(writer, index=False, startrow=startrow, header=False)
-                logger.info(f"路径批次 {batch_num} 结果已保存至: {output_excel_path.resolve()}")
-            except Exception as e:
-                logger.error(f"保存Excel文件失败: {e}")
-
-            # 深度清理当前批次内存
-            del batch_results_df, batch_agg_df, current_results_data
+            # 将批次结果添加到全局结果
+            results.append(batch_agg_df)
+            # 保存批次结果到Excel
+            if batch_num == 1:
+                    with pd.ExcelWriter(output_excel_path, engine='openpyxl', mode='w') as writer:
+                        batch_agg_df.to_excel(writer, index=False, sheet_name=f'Batch_{batch_num}')
+            else:
+                with pd.ExcelWriter(output_excel_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
+                    batch_agg_df.to_excel(writer, index=False, sheet_name=f'Batch_{batch_num}')
+                logger.info(f'路径批次 {batch_num} 结果已保存至: {output_excel_path}')
+                # 确保变量删除仅在定义后执行
+                del batch_results_df, batch_agg_df
+            current_results_data.clear()
+                # 合并内存清理操作
             torch.cuda.empty_cache() if device.type == 'cuda' else None
             gc.collect()
-            # 强制释放未引用内存
-            if hasattr(torch.cuda, 'empty_cache'):
-                torch.cuda.empty_cache()
-            gc.collect()
+        # 统一清理当前批次数据
+        current_results_data.clear()
+        results.clear()
+        image_files.clear()
 
     except Exception as e:
         logger.error(f"批量推理过程中发生错误: {e}", exc_info=True)
