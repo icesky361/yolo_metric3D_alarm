@@ -278,6 +278,10 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                     logger.warning(f"缺少{missing_count}个结果，最后处理的图像: {image_files[-missing_count:] if missing_count <= len(image_files) else image_files}")
             # 继续执行后续处理，而不是终止
             for i, res in enumerate(tqdm(results, desc="正在处理推理结果")):
+                # 防止索引越界
+                if i >= len(image_files):
+                    logger.warning(f"跳过额外结果 {i}")
+                    continue
                 img_path = image_files[i]
                 # 每处理100张图像更新一次进度时间信息
                 if i % 100 == 0 and i > 0:
