@@ -187,13 +187,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
         import time
         start_time = time.time()
         results = []  # 每个路径批次独立初始化结果列表
-        current_results_data = {  # 批次独立的结果数据
-            'original_image_name': [],
-            'annotated_image_name': [],
-            'pred_class': [],
-            'confidence': [],
-            'bbox_xyxy': []
-        }
+        image_files = []  # 每个批次独立存储图像路径，避免累积
         total_images = 0
         batch_num = 0
 
@@ -201,7 +195,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
         warmup_done = False
 
         # 流式处理图像批次
-        image_files = []  # 存储所有图像路径
+        # 每个批次独立存储图像路径，避免累积
         # 获取当前进程ID
         process = psutil.Process(os.getpid())
         # 确保在每个批次开始时重新获取进程信息以避免缓存问题
@@ -260,6 +254,14 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             # 强制Python垃圾回收释放内存
             gc.collect()
 
+            # 初始化批次独立的结果数据
+            current_results_data = {
+                'original_image_name': [],
+                'annotated_image_name': [],
+                'pred_class': [],
+                'confidence': [],
+                'bbox_xyxy': []
+            }
             # 处理当前路径批次的推理结果
             logger.info(f'路径批次 {batch_num} 推理完成，开始处理结果')
             # 确保results和image_files长度匹配
@@ -299,18 +301,18 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                         bbox_coords = box.xyxy[0].cpu().numpy().astype(int).tolist() # 边界框坐标 [x1, y1, x2, y2]
                         
                         # 将结果添加到数据容器中
-                        results_data['original_image_name'].append(img_path.name)
-                        results_data['annotated_image_name'].append(new_filename)
-                        results_data['pred_class'].append(names[class_id])
-                        results_data['confidence'].append(round(confidence, 4))
-                        results_data['bbox_xyxy'].append(",".join(map(str, bbox_coords)))
+                        current_results_data['original_image_name'].append(img_path.name)
+                        current_results_data['annotated_image_name'].append(new_filename)
+                        current_results_data['pred_class'].append(names[class_id])
+                        current_results_data['confidence'].append(round(confidence, 4))
+                        current_results_data['bbox_xyxy'].append(",".join(map(str, bbox_coords)))
                 else:
                     # 如果没有检测到边界框，也添加一条记录，但填充空值
-                    results_data['original_image_name'].append(img_path.name)
-                    results_data['annotated_image_name'].append(new_filename)
-                    results_data['pred_class'].append('未检测到')
-                    results_data['confidence'].append(0.0)
-                    results_data['bbox_xyxy'].append('')
+                    current_results_data['original_image_name'].append(img_path.name)
+                    current_results_data['annotated_image_name'].append(new_filename)
+                    current_results_data['pred_class'].append('未检测到')
+                    current_results_data['confidence'].append(0.0)
+                    current_results_data['bbox_xyxy'].append('')
 
             # --- 6. 将结果保存到Excel ---
             if not results_data['original_image_name']:
@@ -319,6 +321,10 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
 
             # 从当前批次收集的结果创建DataFrame
             batch_results_df = pd.DataFrame(current_results_data)
+            # 清理当前批次数据
+            current_results_data.clear()
+            results.clear()
+            image_files.clear()
 
             # 聚合当前批次结果
             agg_functions = {
@@ -345,8 +351,14 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             except Exception as e:
                 logger.error(f"保存Excel文件失败: {e}")
 
-            # 清理当前批次内存
+            # 深度清理当前批次内存
             del batch_results_df, batch_agg_df, current_results_data
+            torch.cuda.empty_cache() if device.type == 'cuda' else None
+            gc.collect()
+            # 强制释放未引用内存
+            if hasattr(torch.cuda, 'empty_cache'):
+                torch.cuda.empty_cache()
+            gc.collect()
 
     except Exception as e:
         logger.error(f"批量推理过程中发生错误: {e}", exc_info=True)
