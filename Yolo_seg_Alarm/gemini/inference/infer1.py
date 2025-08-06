@@ -207,9 +207,9 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             # 记录批次开始时的内存使用
             mem_before = process.memory_info().rss / 1024 / 1024  # MB
             logger.info(f"处理路径批次 {batch_num}，包含 {current_batch_size} 张图像，累计 {total_images} 张，内存使用: {mem_before:.2f}MB")
-            # 将当前批次的图像路径添加到总列表中
-            image_files.extend(image_batch)
-
+            # 将当前批次图像路径转换为字符串列表
+            batch_paths = [str(img_path) for img_path in image_batch]
+            
             # 预热模型（仅在第一批图像时执行）
             if not warmup_done and current_batch_size > 0:
                 warmup_img = str(image_batch[0])
@@ -217,9 +217,8 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                     model.predict(source=warmup_img, device=device, task='detect', batch=1, half=True, verbose=False)
                 logger.info('模型预热完成')
                 warmup_done = True
-
-            # 将当前批次图像路径转换为字符串列表
-            batch_paths = [str(img_path) for img_path in image_batch]
+            
+            # 只处理当前批次的图像，不添加到总列表中
             total_sub_batches = (current_batch_size + batch_size - 1) // batch_size
 
             # 分推理批次处理当前路径批次
@@ -265,24 +264,12 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             }
             # 处理当前路径批次的推理结果
             logger.info(f'路径批次 {batch_num} 推理完成，开始处理结果')
-            # 确保results和image_files长度匹配
-            # 验证结果数量，不匹配时记录警告而非终止
-            if len(results) != len(image_files):
-                logger.warning(f"推理结果数量({len(results)})与图像数量({len(image_files)})不匹配，可能存在重复或丢失的结果")
-                # 添加调试信息帮助定位问题
-                if len(results) > len(image_files):
-                    extra_count = len(results) - len(image_files)
-                    logger.warning(f"存在{extra_count}个额外结果，最近的额外结果: {results[-extra_count:]}")
-                else:
-                    missing_count = len(image_files) - len(results)
-                    logger.warning(f"缺少{missing_count}个结果，最后处理的图像: {image_files[-missing_count:] if missing_count <= len(image_files) else image_files}")
-            # 继续执行后续处理，而不是终止
-            for i, res in enumerate(tqdm(results, desc="正在处理推理结果")):
-                # 防止索引越界
-                if i >= len(image_files):
-                    logger.warning(f"跳过额外结果 {i}")
-                    continue
-                img_path = image_files[i]
+            
+            # 只处理当前批次的推理结果
+            batch_results = results[-len(image_batch):]
+            
+            for i, res in enumerate(tqdm(batch_results, desc="正在处理推理结果")):
+                img_path = image_batch[i]
                 # 每处理100张图像更新一次进度时间信息
                 if i % 100 == 0 and i > 0:
                     elapsed = time.time() - start_time
