@@ -240,15 +240,43 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 # 记录子批次结束时间
                 sub_elapsed = time.time() - sub_start_time
                 logger.info(f'推理子批次 {sub_batch_num} 处理完成，耗时 {sub_elapsed:.2f} 秒，每秒处理 {len(sub_batch_paths)/sub_elapsed:.2f} 张图像')
-                # 子批次处理后立即清理
-                batch_results = results[-len(current_image_batch):]
-                process_batch_results(batch_results)
-                # 修改前
-                # del batch_paths, image_batch
+                # 子批次处理后立即清理中间变量
+                del sub_results
+                torch.cuda.empty_cache() if device.type == 'cuda' else None
+                gc.collect()
+
+            # 记录批次结束时的内存使用
+            mem_after = process.memory_info().rss / 1024 / 1024  # MB
+            logger.info(f'路径批次 {batch_num} 处理完成，内存使用: {mem_after:.2f}MB，内存变化: {mem_after - mem_before:.2f}MB')
+            
+            # 彻底清理内存
+            del batch_paths  # 保留image_batch用于结果处理
+            if device.type == 'cuda':
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()  # 释放共享内存
+            # 强制Python垃圾回收释放内存
+            gc.collect()
+
+            # 初始化批次独立的结果数据
+            current_results_data = {
+                'original_image_name': [],
+                'annotated_image_name': [],
+                'pred_class': [],
+                'confidence': [],
+                'bbox_xyxy': []
+            }
+            # 处理当前路径批次的推理结果
+            logger.info(f'路径批次 {batch_num} 推理完成，开始处理结果')
+            
+            # 传递当前批次图像路径到结果处理
+            current_image_batch = image_batch.copy()  # 创建副本保留路径信息
+            if not current_image_batch:
+                logger.error('当前批次图像路径为空')
+                return
                 
-                # 修改后
-                del batch_paths  # 保留image_batch用于后续处理
-                current_image_batch = image_batch  # 确保变量在结果处理阶段有效
+            # 只处理当前批次的推理结果
+            batch_results = results[-len(current_image_batch):]
+            
             for i, res in enumerate(tqdm(batch_results, desc="正在处理推理结果")):
                 img_path = current_image_batch[i]
                 # 每处理100张图像更新一次进度时间信息
