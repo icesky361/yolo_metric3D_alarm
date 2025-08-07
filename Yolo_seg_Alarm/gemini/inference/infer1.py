@@ -180,35 +180,51 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             yield batch
 
     # 使用生成器分批获取图像路径
-    image_generator = image_batch_generator(source_path, valid_extensions, batch_size=250)  # 进一步减小路径批次至250张/批
-    batch_size = 8  # 进一步减小推理批次大小至8（从16调整）
+    batch_size = 16  # 进一步减小推理批次大小至8（从16调整）
     logger.info(f"开始流式推理，每批预处理5000张图像路径，推理批次大小{batch_size}")
 
     try:
-        import time
-        start_time = time.time()
-        results = []  # 每个路径批次独立初始化结果列表
-        image_files = []  # 每个批次独立存储图像路径，避免累积
-        total_images = 0
-        batch_num = 0
+            import time
+            # 添加进度跟踪变量
+            processed_images = 0  # 初始化已处理图像计数器
+            start_time = time.time()
+            total_images = 0
+            batch_num = 0
+            processed_images = 0  # 跟踪已处理图像总数
+            current_image_batch = []  # 初始化图像批次变量
 
-        # 预热模型，减少首次推理开销
-        warmup_done = False
+            # 修复进度计算逻辑
+            processed_images += len(current_image_batch)
+            if processed_images % 100 == 0 and processed_images > 0:
+                elapsed = time.time() - start_time
+                # 已通过processed_images += len(current_image_batch)更新，此处无需重复累加
+                total_to_process = total_images
+                remaining = (elapsed / processed_images) * (total_to_process - processed_images)
+                logger.info(f"已处理 {processed_images}/{total_to_process} 张图像...")
 
-        # 流式处理图像批次
-        # 每个批次独立存储图像路径，避免累积
-        # 获取当前进程ID
-        process = psutil.Process(os.getpid())
-        # 确保在每个批次开始时重新获取进程信息以避免缓存问题
-        for image_batch in image_generator:
-            batch_num += 1
-            current_batch_size = len(image_batch)
-            total_images += current_batch_size
-            # 记录批次开始时的内存使用
-            mem_before = process.memory_info().rss / 1024 / 1024  # MB
-            logger.info(f"处理路径批次 {batch_num}，包含 {current_batch_size} 张图像，累计 {total_images} 张，内存使用: {mem_before:.2f}MB")
-            # 将当前批次图像路径转换为字符串列表
-            batch_paths = [str(img_path) for img_path in image_batch]
+            # 预热模型，减少首次推理开销
+            warmup_done = False
+
+            # 创建图像生成器
+            image_generator = image_batch_generator(source_path, valid_extensions, batch_size=250)
+
+            # 流式处理图像批次
+            # 每个批次独立存储图像路径，避免累积
+            # 获取当前进程ID
+            process = psutil.Process(os.getpid())
+            # 确保在每个批次开始时重新获取进程信息以避免缓存问题
+            for image_batch in image_generator:
+                batch_num += 1
+                current_batch_size = len(image_batch)
+                total_images += current_batch_size
+                # 记录批次开始时的内存使用
+                mem_before = process.memory_info().rss / 1024 / 1024  # MB
+                logger.info(f"处理路径批次 {batch_num}，包含 {current_batch_size} 张图像，累计 {total_images} 张，内存使用: {mem_before:.2f}MB")
+                # 将当前批次图像路径转换为字符串列表
+                batch_paths = [str(img_path) for img_path in image_batch]
+                # 其他循环体代码...
+
+                pass  # 已整合到主异常处理结构中
             
             # 预热模型（仅在第一批图像时执行）
             if not warmup_done and current_batch_size > 0:
@@ -218,6 +234,8 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 logger.info('模型预热完成')
                 warmup_done = True
             
+            # 每个批次独立初始化结果列表
+            results = []
             # 只处理当前批次的图像，不添加到总列表中
             total_sub_batches = (current_batch_size + batch_size - 1) // batch_size
 
@@ -276,57 +294,63 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 
             # 只处理当前批次的推理结果
             batch_results = results[-len(current_image_batch):]
+            # 清理原results列表，释放内存
+            del results
             
             for i, res in enumerate(tqdm(batch_results, desc="正在处理推理结果")):
                 img_path = current_image_batch[i]
                 # 每处理100张图像更新一次进度时间信息
-                if i % 100 == 0 and i > 0:
+                processed_images += len(current_image_batch)
+            if processed_images % 100 == 0 and processed_images > 0:
                     elapsed = time.time() - start_time
-                    remaining = (elapsed / i) * (len(results) - i)
-                    logger.info(f"已处理 {i}/{len(results)} 张图像，耗时 {elapsed:.2f} 秒，预计剩余 {remaining:.2f} 秒")
+                    # 使用processed_images跟踪总进度，而非results列表
+                    # 已通过processed_images += len(current_image_batch)更新，此处无需重复累加
+                    total_to_process = total_images
+                    remaining = (elapsed / processed_images) * (total_to_process - processed_images)
+                    logger.info(f"已处理 {processed_images}/{total_to_process} 张图像，耗时 {elapsed:.2f} 秒，预计剩余 {remaining:.2f} 秒")
                 
                 # 验证结果类型并获取类别名称
-                if not isinstance(res, Results):
-                    logger.error(f"无效的结果类型: 预期Results对象，实际得到{type(res)}，索引{i}")
-                    continue
+            if not isinstance(res, Results):
+                logger.error(f"无效的结果类型: 预期Results对象，实际得到{type(res)}，索引{i}")
+                continue
                 names = res.names
 
-                # 读取原始图像，保持色彩信息
-                with Image.open(img_path).convert('RGB') as original_image:  # 使用with语句确保图像文件正确关闭
+            # 读取原始图像，保持色彩信息
+            with Image.open(img_path).convert('RGB') as original_image:  # 使用with语句确保图像文件正确关闭
                     original_array = np.array(original_image)
 
                 # 生成标注图像
-                annotated_image = res.plot(img=original_array)
+            annotated_image = res.plot(img=original_array)
 
                 # 获取文件名和扩展名，添加_tl后缀
-                filename = img_path.stem
-                extension = img_path.suffix
-                new_filename = f"{filename}_tl{extension}"
+            filename = img_path.stem
+            extension = img_path.suffix
+            new_filename = f"{filename}_tl{extension}"
 
-                # 保存标注图像
-                Image.fromarray(annotated_image).save(output_images_path / new_filename)
+            # 保存标注图像
+            Image.fromarray(annotated_image).save(output_images_path / new_filename)
 
-                # 检查是否有检测到的边界框
-                if res.boxes is not None and len(res.boxes) > 0:
-                    # 遍历每个检测到的边界框
-                    for box in res.boxes:
-                        class_id = int(box.cls) # 类别ID
-                        confidence = float(box.conf) # 置信度
-                        bbox_coords = box.xyxy[0].cpu().numpy().astype(int).tolist() # 边界框坐标 [x1, y1, x2, y2]
+            # 检查是否有检测到的边界框
+            if res.boxes is not None and len(res.boxes) > 0:
+                # 遍历每个检测到的边界框
+                for box in res.boxes:
+                    class_id = int(box.cls) # 类别ID
+                    confidence = float(box.conf) # 置信度
+                    bbox_coords = box.xyxy[0].cpu().numpy().astype(int).tolist() # 边界框坐标 [x1, y1, x2, y2]
                         
-                        # 将结果添加到数据容器中
-                        current_results_data['original_image_name'].append(img_path.name)
-                        current_results_data['annotated_image_name'].append(new_filename)
-                        current_results_data['pred_class'].append(names[class_id])
-                        current_results_data['confidence'].append(round(confidence, 4))
-                        current_results_data['bbox_xyxy'].append(",".join(map(str, bbox_coords)))
-                else:
-                    # 如果没有检测到边界框，也添加一条记录，但填充空值
+                    # 将结果添加到数据容器中
                     current_results_data['original_image_name'].append(img_path.name)
                     current_results_data['annotated_image_name'].append(new_filename)
-                    current_results_data['pred_class'].append('未检测到')
-                    current_results_data['confidence'].append(0.0)
-                    current_results_data['bbox_xyxy'].append('')
+                    current_results_data['pred_class'].append(names[class_id])
+                    current_results_data['confidence'].append(round(confidence, 4))
+                    current_results_data['bbox_xyxy'].append(",".join(map(str, bbox_coords)))
+            else:
+                # 如果没有检测到边界框，也添加一条记录，但填充空值
+                current_results_data['original_image_name'].append(img_path.name)
+                current_results_data['annotated_image_name'].append(new_filename)
+                current_results_data['pred_class'].append('未检测到')
+                current_results_data['confidence'].append(0.0)
+                current_results_data['bbox_xyxy'].append('')
 
             # --- 6. 将结果保存到Excel ---
             if not current_results_data['original_image_name']:
@@ -334,9 +358,10 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             else:
                 # 从当前批次收集的结果创建DataFrame
                 batch_results_df = pd.DataFrame(current_results_data)
-                # 清理当前批次数据
-            current_results_data.clear()
-
+                # 删除不再需要的变量
+            del current_image_batch
+            del batch_results
+            
             # 聚合当前批次结果
             agg_functions = {
                 'pred_class': lambda x: '; '.join(x),
@@ -344,36 +369,40 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 'bbox_xyxy': lambda x: '; '.join(x)
             }
             batch_agg_df = batch_results_df.groupby(['original_image_name', 'annotated_image_name']).agg(agg_functions).reset_index()
+            
+            # 删除不再需要的DataFrame
+            del batch_results_df
 
-             # 填充空值
-            batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']] = batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']].fillna('No Detection')
+            # 填充空值
+            # 批次处理主逻辑（包含所有可能抛出异常的操作）
+            try:
+                batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']] = batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']].fillna('No Detection')
 
-            # 将批次结果添加到全局结果
-            results.append(batch_agg_df)
-            # 保存批次结果到Excel
-            if batch_num == 1:
+                # 保存批次结果到Excel
+                if batch_num == 1:
                     with pd.ExcelWriter(output_excel_path, engine='openpyxl', mode='w') as writer:
                         batch_agg_df.to_excel(writer, index=False, sheet_name=f'Batch_{batch_num}')
-            else:
-                with pd.ExcelWriter(output_excel_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
-                    batch_agg_df.to_excel(writer, index=False, sheet_name=f'Batch_{batch_num}')
+                else:
+                    with pd.ExcelWriter(output_excel_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
+                        batch_agg_df.to_excel(writer, index=False, sheet_name=f'Batch_{batch_num}')
                 logger.info(f'路径批次 {batch_num} 结果已保存至: {output_excel_path}')
-                # 确保变量删除仅在定义后执行
-                del batch_results_df, batch_agg_df
-            current_results_data.clear()
-                # 合并内存清理操作
-            torch.cuda.empty_cache() if device.type == 'cuda' else None
-            gc.collect()
-        # 统一清理当前批次数据
-        current_results_data.clear()
-        results.clear()
-        image_files.clear()
 
-    except Exception as e:
-        logger.error(f"批量推理过程中发生错误: {e}", exc_info=True)
-        torch.cuda.empty_cache()  # 清理GPU内存，防止内存溢出
-        results.clear()
-        gc.collect()
+                # 清理操作
+                del batch_agg_df
+                current_results_data.clear()
+                torch.cuda.empty_cache() if device.type == 'cuda' else None
+            except Exception as e:
+                logger.error(f"批量推理过程中发生错误: {e}", exc_info=True)
+        finally:
+            # 无论是否发生异常都执行的清理操作
+            if 'current_results_data' in locals():
+                del current_results_data
+            if 'results' in locals():
+                del results
+            gc.collect()
+            if device.type == 'cuda':
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
 
 if __name__ == '__main__':
     # --- 命令行参数解析 ---
