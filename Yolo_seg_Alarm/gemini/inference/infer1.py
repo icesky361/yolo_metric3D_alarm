@@ -325,18 +325,13 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 img_path = current_image_batch[i]
                 # 每处理100张图像更新一次进度时间信息
                 processed_images += len(current_image_batch)
-            if processed_images % 100 == 0 and processed_images > 0:
+                if processed_images % 100 == 0 and processed_images > 0:
                     elapsed = time.time() - start_time
                     # 使用processed_images跟踪总进度，而非results列表
                     # 已通过processed_images += len(current_image_batch)更新，此处无需重复累加
                     total_to_process = total_images
                     remaining = (elapsed / processed_images) * (total_to_process - processed_images)
                     logger.info(f"已处理 {processed_images}/{total_to_process} 张图像，耗时 {elapsed:.2f} 秒，预计剩余 {remaining:.2f} 秒")
-
-
-
-
-
                 # 验证结果类型并获取类别名称
                 if not isinstance(res, Results):
                     logger.error(f"无效的结果类型: 预期Results对象，实际得到{type(res)}，索引{i}")
