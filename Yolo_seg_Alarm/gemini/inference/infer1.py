@@ -335,44 +335,77 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                     continue
                 names = res.names
 
-            # 读取原始图像，保持色彩信息
-            with Image.open(img_path).convert('RGB') as original_image:  # 使用with语句确保图像文件正确关闭
+                # 读取原始图像，保持色彩信息
+                with Image.open(img_path).convert('RGB') as original_image:
                     original_array = np.array(original_image)
 
                 # 生成标注图像
-            annotated_image = res.plot(img=original_array)
+                annotated_image = res.plot(img=original_array)
 
                 # 获取文件名和扩展名，添加_tl后缀
-            filename = img_path.stem
-            extension = img_path.suffix
-            new_filename = f"{filename}_tl{extension}"
+                filename = img_path.stem
+                extension = img_path.suffix
+                new_filename = f"{filename}_tl{extension}"
 
-            # 保存标注图像
-            Image.fromarray(annotated_image).save(output_images_path / new_filename)
+                # 保存标注图像
+                Image.fromarray(annotated_image).save(output_images_path / new_filename)
+                logger.info(f"已保存标注图像: {output_images_path / new_filename}")
 
-            # 检查是否有检测到的边界框
-            if res.boxes is not None and len(res.boxes) > 0:
-                # 遍历每个检测到的边界框
-                for box in res.boxes:
-                    class_id = int(box.cls) # 类别ID
-                    confidence = float(box.conf) # 置信度
-                    bbox_coords = box.xyxy[0].cpu().numpy().astype(int).tolist() # 边界框坐标 [x1, y1, x2, y2]
-                        
-                    # 将结果添加到数据容器中
+                # 检查是否有检测到的边界框
+                if res.boxes is not None and len(res.boxes) > 0:
+                    # 遍历每个检测到的边界框
+                    for box in res.boxes:
+                        class_id = int(box.cls)
+                        confidence = float(box.conf)
+                        bbox_coords = box.xyxy[0].cpu().numpy().astype(int).tolist()
+                            
+                        # 将结果添加到数据容器中
+                        current_results_data['original_image_name'].append(img_path.name)
+                        current_results_data['annotated_image_name'].append(new_filename)
+                        current_results_data['pred_class'].append(names[class_id])
+                        current_results_data['confidence'].append(round(confidence, 4))
+                        current_results_data['bbox_xyxy'].append(",".join(map(str, bbox_coords)))
+                else:
+                    # 如果没有检测到边界框，也添加一条记录
                     current_results_data['original_image_name'].append(img_path.name)
                     current_results_data['annotated_image_name'].append(new_filename)
-                    current_results_data['pred_class'].append(names[class_id])
-                    current_results_data['confidence'].append(round(confidence, 4))
-                    current_results_data['bbox_xyxy'].append(",".join(map(str, bbox_coords)))
-            else:
-                # 如果没有检测到边界框，也添加一条记录，但填充空值
-                current_results_data['original_image_name'].append(img_path.name)
-                current_results_data['annotated_image_name'].append(new_filename)
-                current_results_data['pred_class'].append('未检测到')
-                current_results_data['confidence'].append(0.0)
-                current_results_data['bbox_xyxy'].append('')
+                    current_results_data['pred_class'].append('未检测到')
+                    current_results_data['confidence'].append(0.0)
+                    current_results_data['bbox_xyxy'].append('')
 
             # --- 6. 将结果保存到Excel ---
+            if not current_results_data['original_image_name']:
+                logger.warning(f"路径批次 {batch_num} 未检测到任何目标，继续处理下一批次")
+            else:
+                # 从当前批次收集的结果创建DataFrame
+                batch_results_df = pd.DataFrame(current_results_data)
+                # 聚合当前批次结果
+                agg_functions = {
+                    'pred_class': lambda x: '; '.join(x),
+                    'confidence': lambda x: '; '.join(map(str, x)),
+                    'bbox_xyxy': lambda x: '; '.join(x)
+                }
+                batch_agg_df = batch_results_df.groupby(['original_image_name', 'annotated_image_name']).agg(agg_functions).reset_index()
+                
+                # 填充空值
+                batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']] = batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']].fillna('No Detection')
+                
+                # 保存到Excel
+                if output_excel_path.exists():
+                    # 如果文件存在，追加数据
+                    existing_df = pd.read_excel(output_excel_path)
+                    combined_df = pd.concat([existing_df, batch_agg_df], ignore_index=True)
+                    combined_df.to_excel(output_excel_path, index=False)
+                else:
+                    # 如果文件不存在，创建新文件
+                    batch_agg_df.to_excel(output_excel_path, index=False)
+                logger.info(f"批次 {batch_num} 结果已保存到 {output_excel_path}")
+                
+                # 清理内存
+                del batch_results_df, batch_agg_df
+            
+            # 清理变量
+            del current_image_batch, batch_results, current_results_data
             if not current_results_data['original_image_name']:
                 logger.warning(f"路径批次 {batch_num} 未检测到任何目标，继续处理下一批次")
             else:
