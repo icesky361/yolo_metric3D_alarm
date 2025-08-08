@@ -88,6 +88,7 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
+import os
 logger = logging.getLogger(__name__)
 def get_device():
     """检测可用的硬件（GPU/CPU）。"""
@@ -100,7 +101,7 @@ def get_device():
         logger.info("未找到支持CUDA的GPU。将在CPU上运行。")
     return device
 
-def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
+def run_inference(weights_path: str, source_dir: str, output_excel_path: str = None):
     """
     对一个目录中的图像进行推理，并将结果保存到Excel文件中。
 
@@ -111,14 +112,23 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
     """
     # --- 1. 初始化设置 ---
     device = get_device()
-    source_path = Path(source_dir) / 'images' # 修复路径：指向用户实际图片目录images子文件夹
+    source_path = Path(source_dir)  # 使用用户提供的源目录，不强制添加images子文件夹
     # 确保输出目录存在
-    output_dir = Path('results')
+    # 使用脚本所在目录作为基准的绝对路径
+    script_dir = Path(__file__).parent.resolve()
+    output_dir = script_dir.parent / 'results'
     output_dir.mkdir(exist_ok=True)
     output_images_path = output_dir / 'images'
     output_images_path.mkdir(exist_ok=True)
+    # 记录最终使用的输出路径
+    logger.info(f"结果将保存到Excel文件: {output_excel_path.resolve()}")
+    logger.info(f"标注图像将保存到目录: {output_images_path.resolve()}")
     # 设置输出Excel文件路径
-    output_excel_path = Path(output_excel_path)
+    # 设置默认Excel路径为results目录下的results.xlsx
+    if output_excel_path is None:
+        output_excel_path = output_dir / 'results.xlsx'
+    else:
+        output_excel_path = Path(output_excel_path)
     # 确保输出Excel文件的父目录存在
     output_excel_path.parent.mkdir(exist_ok=True)
 
@@ -144,6 +154,8 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
         logger.error(f"加载模型失败。错误: {e}")
         return
 
+    # 处理完成后记录最终结果位置
+    logger.info(f"所有批次处理完成。结果已保存至Excel: {output_excel_path.resolve()} 和图像目录: {output_images_path.resolve()}")
     # --- 3. 创建新的Excel文件用于存储结果 ---
     try:
         # 创建新的DataFrame用于存储结果
@@ -347,8 +359,14 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 extension = img_path.suffix
                 new_filename = f"{filename}_tl{extension}"
 
+                # 确保输出目录存在
+                os.makedirs(output_images_path, exist_ok=True)
                 # 保存标注图像
-                Image.fromarray(annotated_image).save(output_images_path / new_filename)
+                try:
+                    Image.fromarray(annotated_image).save(output_images_path / new_filename)
+                    logger.info(f"已保存标注图像: {output_images_path / new_filename}")
+                except Exception as e:
+                    logger.error(f"保存图像失败: {str(e)}", exc_info=True)
                 logger.info(f"已保存标注图像: {output_images_path / new_filename}")
 
                 # 检查是否有检测到的边界框
@@ -390,6 +408,10 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 # 填充空值
                 batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']] = batch_agg_df[['pred_class', 'confidence', 'bbox_xyxy']].fillna('No Detection')
                 
+                # 确保Excel输出目录存在
+                os.makedirs(os.path.dirname(output_excel_path), exist_ok=True)
+                # 调试：输出Excel保存路径
+                logger.info(f"准备保存Excel文件到: {output_excel_path.resolve()}")
                 # 保存到Excel
                 if output_excel_path.exists():
                     # 如果文件存在，追加数据
@@ -400,7 +422,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                     # 如果文件不存在，创建新文件
                     # 保存批次结果到Excel
                     try:
-                        with pd.ExcelWriter(output_excel_path, engine='openpyxl', mode='a' if output_excel_path.exists() else 'w', if_sheet_exists='overlay') as writer:
+                        with pd.ExcelWriter(output_excel_path, engine='openpyxl', mode='w' if not output_excel_path.exists() else 'a', if_sheet_exists='overlay') as writer:
                             # 如果是第一次写入，添加表头
                             if not output_excel_path.exists() or writer.sheets == {}:
                                 batch_agg_df.to_excel(writer, index=False, header=True)
@@ -411,7 +433,6 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                         logger.info(f"批次 {batch_num} 结果已保存到 {output_excel_path}")
                     except Exception as e:
                         logger.error(f"保存Excel文件失败: {str(e)}", exc_info=True)
-                    raise
                 
                 # 清理内存
                 del batch_results_df, batch_agg_df
