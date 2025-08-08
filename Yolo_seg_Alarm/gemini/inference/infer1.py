@@ -308,11 +308,15 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                     total_to_process = total_images
                     remaining = (elapsed / processed_images) * (total_to_process - processed_images)
                     logger.info(f"已处理 {processed_images}/{total_to_process} 张图像，耗时 {elapsed:.2f} 秒，预计剩余 {remaining:.2f} 秒")
-                
+
+
+
+
+
                 # 验证结果类型并获取类别名称
-            if not isinstance(res, Results):
-                logger.error(f"无效的结果类型: 预期Results对象，实际得到{type(res)}，索引{i}")
-                continue
+                if not isinstance(res, Results):
+                    logger.error(f"无效的结果类型: 预期Results对象，实际得到{type(res)}，索引{i}")
+                    continue
                 names = res.names
 
             # 读取原始图像，保持色彩信息
@@ -393,14 +397,14 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 torch.cuda.empty_cache() if device.type == 'cuda' else None
             except Exception as e:
                 logger.error(f"批量推理过程中发生错误: {e}", exc_info=True)
-        finally:
-            # 无论是否发生异常都执行的清理操作
-            if 'current_results_data' in locals():
-                del current_results_data
-            if 'results' in locals():
-                del results
-            gc.collect()
-            if device.type == 'cuda':
+    finally:
+        # 无论是否发生异常都执行的清理操作
+        if 'current_results_data' in locals():
+            del current_results_data
+        if 'results' in locals():
+            del results
+        gc.collect()
+        if device.type == 'cuda':
                 torch.cuda.empty_cache()
                 torch.cuda.ipc_collect()
 
