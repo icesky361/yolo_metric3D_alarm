@@ -235,69 +235,66 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 logger.info(f"处理路径批次 {batch_num}，包含 {current_batch_size} 张图像，累计 {total_images} 张，内存使用: {mem_before:.2f}MB")
                 # 将当前批次图像路径转换为字符串列表
                 batch_paths = [str(img_path) for img_path in image_batch]
-                # 其他循环体代码...
 
-                pass  # 已整合到主异常处理结构中
-            
-            # 预热模型（仅在第一批图像时执行）
-            if not warmup_done and current_batch_size > 0:
-                warmup_img = str(image_batch[0])
-                with torch.no_grad():
-                    model.predict(source=warmup_img, device=device, task='detect', batch=1, half=True, verbose=False)
-                logger.info('模型预热完成')
-                warmup_done = True
-            
-            # 每个批次独立初始化结果列表
-            results = []
-            # 只处理当前批次的图像，不添加到总列表中
-            total_sub_batches = (current_batch_size + batch_size - 1) // batch_size
+                # 预热模型（仅在第一批图像时执行）
+                if not warmup_done and current_batch_size > 0:
+                    warmup_img = str(image_batch[0])
+                    with torch.no_grad():
+                        model.predict(source=warmup_img, device=device, task='detect', batch=1, half=True, verbose=False)
+                    logger.info('模型预热完成')
+                    warmup_done = True
+                
+                # 每个批次独立初始化结果列表
+                results = []
+                # 只处理当前批次的图像，不添加到总列表中
+                total_sub_batches = (current_batch_size + batch_size - 1) // batch_size
 
-            # 分推理批次处理当前路径批次（关键分批次逻辑）
-            # 由于单批次图像过多可能导致显存不足，进一步拆分为更小的推理子批次
-            for sub_batch_idx in range(total_sub_batches):
-                sub_start = sub_batch_idx * batch_size  # 子批次起始索引
-                sub_end = min(sub_start + batch_size, current_batch_size)  # 子批次结束索引（防越界）
-                sub_batch_paths = batch_paths[sub_start:sub_end]  # 当前子批次图像路径列表
-                # 计算全局子批次编号（用于日志追踪）
-                sub_batch_num = (batch_num - 1) * total_sub_batches + sub_batch_idx + 1
+                # 分推理批次处理当前路径批次（关键分批次逻辑）
+                # 由于单批次图像过多可能导致显存不足，进一步拆分为更小的推理子批次
+                for sub_batch_idx in range(total_sub_batches):
+                    sub_start = sub_batch_idx * batch_size  # 子批次起始索引
+                    sub_end = min(sub_start + batch_size, current_batch_size)  # 子批次结束索引（防越界）
+                    sub_batch_paths = batch_paths[sub_start:sub_end]  # 当前子批次图像路径列表
+                    # 计算全局子批次编号（用于日志追踪）
+                    sub_batch_num = (batch_num - 1) * total_sub_batches + sub_batch_idx + 1
 
-                # 记录子批次开始时间
-                sub_start_time = time.time()
+                    # 记录子批次开始时间
+                    sub_start_time = time.time()
 
-                # 对当前子批次进行推理
-                with torch.no_grad():
-                    logger.info(f'处理推理子批次 {sub_batch_num}，共 {len(sub_batch_paths)} 张图像')
-                    sub_results = model.predict(source=sub_batch_paths, device=device, task='detect', batch=batch_size, half=True, verbose=False)
-                    results.extend(sub_results)
+                    # 对当前子批次进行推理
+                    with torch.no_grad():
+                        logger.info(f'处理推理子批次 {sub_batch_num}，共 {len(sub_batch_paths)} 张图像')
+                        sub_results = model.predict(source=sub_batch_paths, device=device, task='detect', batch=batch_size, half=True, verbose=False)
+                        results.extend(sub_results)
 
-                # 记录子批次结束时间
-                sub_elapsed = time.time() - sub_start_time
-                logger.info(f'推理子批次 {sub_batch_num} 处理完成，耗时 {sub_elapsed:.2f} 秒，每秒处理 {len(sub_batch_paths)/sub_elapsed:.2f} 张图像')
-                # 子批次处理后立即清理中间变量
-                del sub_results
-                torch.cuda.empty_cache() if device.type == 'cuda' else None
+                    # 记录子批次结束时间
+                    sub_elapsed = time.time() - sub_start_time
+                    logger.info(f'推理子批次 {sub_batch_num} 处理完成，耗时 {sub_elapsed:.2f} 秒，每秒处理 {len(sub_batch_paths)/sub_elapsed:.2f} 张图像')
+                    # 子批次处理后立即清理中间变量
+                    del sub_results
+                    torch.cuda.empty_cache() if device.type == 'cuda' else None
+                    gc.collect()
+
+                # 记录批次处理完成时的内存使用（CPU内存）
+                mem_after_process = process.memory_info().rss / 1024 / 1024  # MB
+                logger.info(f'路径批次 {batch_num} 处理完成（未清理前），内存使用: {mem_after_process:.2f}MB，内存变化: {mem_after_process - mem_before:.2f}MB')
+                
+                # 保存操作完成后执行内存清理（优化调整）
+                # 记录清理前内存使用（CPU内存）
+                mem_before_clean = process.memory_info().rss / 1024 / 1024  # MB
+                logger.info(f'路径批次 {batch_num} 保存完成，开始清理内存，清理前内存使用: {mem_before_clean:.2f}MB')
+
+                # 彻底清理内存（关键性能优化点）
+                del batch_paths  # 释放批次路径列表内存，保留image_batch用于后续结果处理
+                if device.type == 'cuda':
+                    torch.cuda.empty_cache()  # 释放未使用的CUDA缓存（PyTorch内部管理的显存）
+                    torch.cuda.ipc_collect()  # 收集并释放跨进程通信（IPC）使用的共享内存
+                # 强制Python垃圾回收机制运行，释放未引用的对象内存
                 gc.collect()
 
-            # 记录批次处理完成时的内存使用（CPU内存）
-            mem_after_process = process.memory_info().rss / 1024 / 1024  # MB
-            logger.info(f'路径批次 {batch_num} 处理完成（未清理前），内存使用: {mem_after_process:.2f}MB，内存变化: {mem_after_process - mem_before:.2f}MB')
-            
-            # 保存操作完成后执行内存清理（优化调整）
-            # 记录清理前内存使用（CPU内存）
-            mem_before_clean = process.memory_info().rss / 1024 / 1024  # MB
-            logger.info(f'路径批次 {batch_num} 保存完成，开始清理内存，清理前内存使用: {mem_before_clean:.2f}MB')
-
-            # 彻底清理内存（关键性能优化点）
-            del batch_paths  # 释放批次路径列表内存，保留image_batch用于后续结果处理
-            if device.type == 'cuda':
-                torch.cuda.empty_cache()  # 释放未使用的CUDA缓存（PyTorch内部管理的显存）
-                torch.cuda.ipc_collect()  # 收集并释放跨进程通信（IPC）使用的共享内存
-            # 强制Python垃圾回收机制运行，释放未引用的对象内存
-            gc.collect()
-
-            # 记录清理后内存使用
-            mem_after_clean = process.memory_info().rss / 1024 / 1024  # MB
-            logger.info(f'路径批次 {batch_num} 内存清理完成，清理后内存使用: {mem_after_clean:.2f}MB，内存减少: {mem_before_clean - mem_after_clean:.2f}MB')
+                # 记录清理后内存使用
+                mem_after_clean = process.memory_info().rss / 1024 / 1024  # MB
+                logger.info(f'路径批次 {batch_num} 内存清理完成，清理后内存使用: {mem_after_clean:.2f}MB，内存减少: {mem_before_clean - mem_after_clean:.2f}MB')
 
             # 初始化批次独立的结果数据
             current_results_data = {
