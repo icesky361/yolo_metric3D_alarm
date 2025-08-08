@@ -400,17 +400,17 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                     # 如果文件不存在，创建新文件
                     # 保存批次结果到Excel
                     try:
-                    with pd.ExcelWriter(output_excel_path, engine='openpyxl', mode='a' if output_excel_path.exists() else 'w', if_sheet_exists='overlay') as writer:
-                        # 如果是第一次写入，添加表头
-                        if not output_excel_path.exists() or writer.sheets == {}:
-                            batch_agg_df.to_excel(writer, index=False, header=True)
-                        else:
+                        with pd.ExcelWriter(output_excel_path, engine='openpyxl', mode='a' if output_excel_path.exists() else 'w', if_sheet_exists='overlay') as writer:
+                            # 如果是第一次写入，添加表头
+                            if not output_excel_path.exists() or writer.sheets == {}:
+                                batch_agg_df.to_excel(writer, index=False, header=True)
+                            else:
                             # 追加到现有数据下方
-                            startrow = writer.sheets[writer.book.sheetnames[0]].max_row
-                            batch_agg_df.to_excel(writer, index=False, header=False, startrow=startrow)
-                    logger.info(f"批次 {batch_num} 结果已保存到 {output_excel_path}")
-                except Exception as e:
-                    logger.error(f"保存Excel文件失败: {str(e)}", exc_info=True)
+                                startrow = writer.sheets[writer.book.sheetnames[0]].max_row
+                                batch_agg_df.to_excel(writer, index=False, header=False, startrow=startrow)
+                        logger.info(f"批次 {batch_num} 结果已保存到 {output_excel_path}")
+                    except Exception as e:
+                        logger.error(f"保存Excel文件失败: {str(e)}", exc_info=True)
                     raise
                 
                 # 清理内存
