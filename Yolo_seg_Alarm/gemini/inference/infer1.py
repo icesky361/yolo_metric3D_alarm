@@ -77,7 +77,6 @@ import numpy as np
 from PIL import Image
 import logging
 import numpy as np
-from PIL import Image
 import psutil
 import gc
 import os
@@ -168,14 +167,28 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
     # 定义有效的图像文件扩展名
     valid_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
     def image_batch_generator(source_path, valid_extensions, batch_size=1000):
-        """生成器函数：分批加载图像路径，避免一次性加载所有路径"""
+        """
+        生成器函数：流式分批加载图像路径，避免一次性加载所有路径导致内存溢出
+
+        Args:
+            source_path (Path): 图像根目录路径
+            valid_extensions (set): 有效图像扩展名集合（如{'.jpg', '.png'}）
+            batch_size (int): 每批加载的图像路径数量，默认1000
+
+        Yields:
+            list: 包含当前批次图像路径的列表
+        """
         batch = []
+        # 递归遍历所有子目录，收集符合扩展名的图像文件路径
         for file in source_path.rglob('*.*'):
+            # 过滤有效扩展名且是文件的路径
             if file.suffix.lower() in valid_extensions and file.is_file():
                 batch.append(file)
+                # 达到批次大小时返回当前批次并重置
                 if len(batch) >= batch_size:
                     yield batch
                     batch = []
+        # 处理最后一批不足batch_size的剩余路径
         if batch:  # 处理最后一批
             yield batch
 
@@ -239,11 +252,13 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             # 只处理当前批次的图像，不添加到总列表中
             total_sub_batches = (current_batch_size + batch_size - 1) // batch_size
 
-            # 分推理批次处理当前路径批次
+            # 分推理批次处理当前路径批次（关键分批次逻辑）
+            # 由于单批次图像过多可能导致显存不足，进一步拆分为更小的推理子批次
             for sub_batch_idx in range(total_sub_batches):
-                sub_start = sub_batch_idx * batch_size
-                sub_end = min(sub_start + batch_size, current_batch_size)
-                sub_batch_paths = batch_paths[sub_start:sub_end]
+                sub_start = sub_batch_idx * batch_size  # 子批次起始索引
+                sub_end = min(sub_start + batch_size, current_batch_size)  # 子批次结束索引（防越界）
+                sub_batch_paths = batch_paths[sub_start:sub_end]  # 当前子批次图像路径列表
+                # 计算全局子批次编号（用于日志追踪）
                 sub_batch_num = (batch_num - 1) * total_sub_batches + sub_batch_idx + 1
 
                 # 记录子批次开始时间
@@ -267,12 +282,12 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             mem_after = process.memory_info().rss / 1024 / 1024  # MB
             logger.info(f'路径批次 {batch_num} 处理完成，内存使用: {mem_after:.2f}MB，内存变化: {mem_after - mem_before:.2f}MB')
             
-            # 彻底清理内存
-            del batch_paths  # 保留image_batch用于结果处理
+            # 彻底清理内存（关键性能优化点）
+            del batch_paths  # 释放批次路径列表内存，保留image_batch用于后续结果处理
             if device.type == 'cuda':
-                torch.cuda.empty_cache()
-                torch.cuda.ipc_collect()  # 释放共享内存
-            # 强制Python垃圾回收释放内存
+                torch.cuda.empty_cache()  # 释放未使用的CUDA缓存（PyTorch内部管理的显存）
+                torch.cuda.ipc_collect()  # 收集并释放跨进程通信（IPC）使用的共享内存
+            # 强制Python垃圾回收机制运行，释放未引用的对象内存
             gc.collect()
 
             # 初始化批次独立的结果数据
