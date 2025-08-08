@@ -128,7 +128,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
         # 1. 仅在模型初始化时指定检测任务
         # 根据train2.py中的工作配置，仅指定检测任务
         # 双重保障：初始化时指定任务 + 加载后强制设置
-        model = YOLO(weights_path, task='detect') # 初始化指定检测任务 (移除不支持的mode参数)
+        model = YOLO(weights_path, task='detect') # 初始化指定检测任务 
         model.to(device)  # 移动到目标设备
         model.eval()      # 启用PyTorch评估模式
         # 兼容旧版本: 显式设置推理模式
@@ -136,7 +136,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             model.mode = 'predict'
         # 验证推理配置
         assert model.task == 'detect', f'模型任务错误: 预期detect，实际{model.task}'
-        assert hasattr(model, 'predict'), '模型没有predict方法'
+        assert hasattr(model, 'predict'), f'模型没有predict方法'
         logger.info(f'模型已加载至{device}，推理模式确认完成')
         # 确保使用predict方法进行推理，显式指定任务类型
         logger.info(f"成功从 {weights_path} 加载模型")
@@ -278,10 +278,15 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 torch.cuda.empty_cache() if device.type == 'cuda' else None
                 gc.collect()
 
-            # 记录批次结束时的内存使用
-            mem_after = process.memory_info().rss / 1024 / 1024  # MB
-            logger.info(f'路径批次 {batch_num} 处理完成，内存使用: {mem_after:.2f}MB，内存变化: {mem_after - mem_before:.2f}MB')
+            # 记录批次处理完成时的内存使用（CPU内存）
+            mem_after_process = process.memory_info().rss / 1024 / 1024  # MB
+            logger.info(f'路径批次 {batch_num} 处理完成（未清理前），内存使用: {mem_after_process:.2f}MB，内存变化: {mem_after_process - mem_before:.2f}MB')
             
+            # 保存操作完成后执行内存清理（优化调整）
+            # 记录清理前内存使用（CPU内存）
+            mem_before_clean = process.memory_info().rss / 1024 / 1024  # MB
+            logger.info(f'路径批次 {batch_num} 保存完成，开始清理内存，清理前内存使用: {mem_before_clean:.2f}MB')
+
             # 彻底清理内存（关键性能优化点）
             del batch_paths  # 释放批次路径列表内存，保留image_batch用于后续结果处理
             if device.type == 'cuda':
@@ -289,6 +294,10 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 torch.cuda.ipc_collect()  # 收集并释放跨进程通信（IPC）使用的共享内存
             # 强制Python垃圾回收机制运行，释放未引用的对象内存
             gc.collect()
+
+            # 记录清理后内存使用
+            mem_after_clean = process.memory_info().rss / 1024 / 1024  # MB
+            logger.info(f'路径批次 {batch_num} 内存清理完成，清理后内存使用: {mem_after_clean:.2f}MB，内存减少: {mem_before_clean - mem_after_clean:.2f}MB')
 
             # 初始化批次独立的结果数据
             current_results_data = {
