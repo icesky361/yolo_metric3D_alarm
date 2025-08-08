@@ -398,14 +398,28 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                     combined_df.to_excel(output_excel_path, index=False)
                 else:
                     # 如果文件不存在，创建新文件
-                    batch_agg_df.to_excel(output_excel_path, index=False)
-                logger.info(f"批次 {batch_num} 结果已保存到 {output_excel_path}")
+                    # 保存批次结果到Excel
+                    try:
+                    with pd.ExcelWriter(output_excel_path, engine='openpyxl', mode='a' if output_excel_path.exists() else 'w', if_sheet_exists='overlay') as writer:
+                        # 如果是第一次写入，添加表头
+                        if not output_excel_path.exists() or writer.sheets == {}:
+                            batch_agg_df.to_excel(writer, index=False, header=True)
+                        else:
+                            # 追加到现有数据下方
+                            startrow = writer.sheets[writer.book.sheetnames[0]].max_row
+                            batch_agg_df.to_excel(writer, index=False, header=False, startrow=startrow)
+                    logger.info(f"批次 {batch_num} 结果已保存到 {output_excel_path}")
+                except Exception as e:
+                    logger.error(f"保存Excel文件失败: {str(e)}", exc_info=True)
+                    raise
                 
                 # 清理内存
                 del batch_results_df, batch_agg_df
+                current_results_data.clear()
             
             # 清理变量
-            del current_image_batch, batch_results, current_results_data
+            del current_image_batch, batch_results
+            # 检查是否有结果
             if not current_results_data['original_image_name']:
                 logger.warning(f"路径批次 {batch_num} 未检测到任何目标，继续处理下一批次")
             else:
