@@ -54,7 +54,7 @@ def log_memory_usage(stage: str, is_cleanup: bool = False):
         gpu_mem_percent = (gpu_mem_reserved / 20) * 100  # 20GB是A4500的总显存
         gpu_mem_info = f"系统内存使用: {mem_used_gb:.2f}/{mem_total_gb:.2f}GB ({mem_percent}%), GPU已分配: {gpu_mem_allocated:.2f}GB, GPU已保留: {gpu_mem_reserved:.2f}GB (利用率: {gpu_mem_percent:.1f}%)，"
     
-    logger.info(f"【{stage}]{gpu_mem_info}")
+    logger.info(f"【{stage}】{gpu_mem_info}")
 
 
 def get_device():
@@ -189,7 +189,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             batch_start_time = time.time()
 
             # 第二层循环：将路径批次拆分为推理子批次
-            inference_batch_size = 144  # 推理子批次大小，针对20GB A4500优化
+            inference_batch_size = 64  # 推理子批次大小，针对20GB A4500优化
             total_sub_batches = (current_batch_size + inference_batch_size - 1) // inference_batch_size
             logger.info(f'路径批次 {batch_idx} 将拆分为 {total_sub_batches} 个推理子批次')
 
