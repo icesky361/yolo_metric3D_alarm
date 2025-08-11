@@ -120,9 +120,6 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str = N
     output_dir.mkdir(exist_ok=True)
     output_images_path = output_dir / 'images'
     output_images_path.mkdir(exist_ok=True)
-    # 记录最终使用的输出路径
-    logger.info(f"结果将保存到Excel文件: {output_excel_path.resolve()}")
-    logger.info(f"标注图像将保存到目录: {output_images_path.resolve()}")
     # 设置输出Excel文件路径
     # 设置默认Excel路径为results目录下的results.xlsx
     if output_excel_path is None:
@@ -131,6 +128,9 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str = N
         output_excel_path = Path(output_excel_path)
     # 确保输出Excel文件的父目录存在
     output_excel_path.parent.mkdir(exist_ok=True)
+    # 记录最终使用的输出路径
+    logger.info(f"结果将保存到Excel文件: {output_excel_path.resolve()}")
+    logger.info(f"标注图像将保存到目录: {output_images_path.resolve()}")
 
     # --- 2. 加载模型 ---
     try:
