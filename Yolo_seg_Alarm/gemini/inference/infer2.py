@@ -52,11 +52,7 @@ def log_memory_usage(stage: str, is_cleanup: bool = False):
         gpu_mem_allocated = torch.cuda.memory_allocated() / (1024 **3)
         gpu_mem_reserved = torch.cuda.memory_reserved() / (1024** 3)
         gpu_mem_percent = (gpu_mem_reserved / 20) * 100  # 20GB是A4500的总显存
-        
-        if is_cleanup:
-            gpu_mem_info = f"清理后GPU已保留: {gpu_mem_reserved:.2f}GB (利用率: {gpu_mem_percent:.1f}%)"
-        else:
-            gpu_mem_info = f"系统内存使用: {mem_used_gb:.2f}/{mem_total_gb:.2f}GB ({mem_percent}%), GPU已分配: {gpu_mem_allocated:.2f}GB, GPU已保留: {gpu_mem_reserved:.2f}GB (利用率: {gpu_mem_percent:.1f}%)，"
+        gpu_mem_info = f"系统内存使用: {mem_used_gb:.2f}/{mem_total_gb:.2f}GB ({mem_percent}%), GPU已分配: {gpu_mem_allocated:.2f}GB, GPU已保留: {gpu_mem_reserved:.2f}GB (利用率: {gpu_mem_percent:.1f}%)，"
     
     logger.info(f"【{stage}]{gpu_mem_info}")
 
@@ -278,11 +274,9 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             results_agg_df.to_excel(output_excel_path, index=False)
             logger.info(f'路径批次 {batch_idx} 中间结果已保存至 {output_excel_path.resolve()}')
             # 每10个批次输出一次进度信息
-            processed_images += current_batch_size
             processed_batches += 1
-            if processed_batches % 10 == 0:
-                progress_bar.update(current_batch_size)
-                logger.info(f"进度更新: 已完成 {processed_batches} 个路径批次，处理了 {processed_images} 张图片")
+            progress_bar.update(current_batch_size)
+            logger.info(f"进度更新: 已完成 {processed_batches} 个路径批次，处理了 {processed_images} 张图片")
             # 删除旧的进度更新行
 
             # 计算处理时间和性能指标
