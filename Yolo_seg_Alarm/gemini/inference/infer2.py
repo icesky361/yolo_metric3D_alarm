@@ -161,6 +161,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             batch_idx += 1
             current_batch_size = len(path_batch)
             logger.info(f'开始处理路径批次 {batch_idx}，共 {current_batch_size} 张图像')
+            batch_start_time = time.time()
 
             # 第二层循环：将路径批次拆分为推理子批次
             inference_batch_size = 144  # 推理子批次大小，针对20GB A4500优化
@@ -247,6 +248,16 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             results_agg_df[['pred_class', 'confidence', 'bbox_xyxy']] = results_agg_df[['pred_class', 'confidence', 'bbox_xyxy']].fillna('No Detection')
             results_agg_df.to_excel(output_excel_path, index=False)
             logger.info(f'路径批次 {batch_idx} 中间结果已保存至 {output_excel_path.resolve()}')
+            # 计算处理时间和性能指标
+            batch_end_time = time.time()
+            batch_duration = batch_end_time - batch_start_time
+            
+            if batch_duration > 0:
+                images_per_minute = (current_batch_size / batch_duration) * 60
+                seconds_per_1k_images = (batch_duration / current_batch_size) * 1000
+                logger.info(f"批次 {batch_idx} 性能指标: 平均每分钟处理 {images_per_minute:.2f} 张图片, 平均每1000张图片耗时 {seconds_per_1k_images:.2f} 秒")
+            else:
+                logger.info(f"批次 {batch_idx} 处理完成，时间过短无法计算性能指标")
 
             # 重置结果数据结构，只保留当前批次数据用于聚合
             results_data = {
