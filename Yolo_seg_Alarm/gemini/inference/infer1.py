@@ -364,10 +364,9 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str = N
                 # 保存标注图像
                 try:
                     Image.fromarray(annotated_image).save(output_images_path / new_filename)
-                    logger.info(f"已保存标注图像: {output_images_path / new_filename}")
+                    logger.info(f"已保存标注图像: {output_images_path.resolve() / new_filename}")
                 except Exception as e:
                     logger.error(f"保存图像失败: {str(e)}", exc_info=True)
-                logger.info(f"已保存标注图像: {output_images_path / new_filename}")
 
                 # 检查是否有检测到的边界框
                 if res.boxes is not None and len(res.boxes) > 0:
@@ -392,6 +391,18 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str = N
                     current_results_data['bbox_xyxy'].append('')
 
             # --- 6. 将结果保存到Excel ---
+        # 将当前批次结果转换为DataFrame并保存
+        batch_df = pd.DataFrame(current_results_data)
+        if output_excel_path.exists():
+            # 如果文件存在，追加数据
+            with pd.ExcelWriter(output_excel_path, mode='a', engine='openpyxl', if_sheet_exists='overlay') as writer:
+                startrow = writer.sheets['Sheet1'].max_row
+                batch_df.to_excel(writer, index=False, header=False, startrow=startrow)
+        else:
+            # 如果文件不存在，创建新文件
+            batch_df.to_excel(output_excel_path, index=False)
+        logger.info(f'已将 {len(batch_df)} 条结果保存到Excel文件: {output_excel_path.resolve()}')
+            
             if not current_results_data['original_image_name']:
                 logger.warning(f"路径批次 {batch_num} 未检测到任何目标，继续处理下一批次")
             else:
