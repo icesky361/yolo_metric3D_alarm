@@ -16,3 +16,4 @@ torchvision==0.18.1+cu121
 mmcv==2.1.0
 mmdet==3.3.0
 openpyxl>=3.0.10
+psutil==5.9.5

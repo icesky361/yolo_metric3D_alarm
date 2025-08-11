@@ -27,6 +27,8 @@ from PIL import Image
 import logging
 import gc
 import time
+import psutil
+
 
 # 配置日志记录器
 logging.basicConfig(
@@ -35,6 +37,25 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
+
+def log_memory_usage(stage: str):
+    """记录当前GPU和系统内存使用情况"""
+    # 记录系统内存使用
+    mem = psutil.virtual_memory()
+    mem_used_gb = mem.used / (1024 **3)
+    mem_total_gb = mem.total / (1024** 3)
+    mem_percent = mem.percent
+    
+    # 记录GPU内存使用
+    gpu_mem_info = ""
+    if torch.cuda.is_available():
+        gpu_mem_allocated = torch.cuda.memory_allocated() / (1024 **3)
+        gpu_mem_reserved = torch.cuda.memory_reserved() / (1024** 3)
+        gpu_mem_percent = (gpu_mem_allocated / 20) * 100  # 20GB是A4500的总显存
+        gpu_mem_info = f", GPU已分配: {gpu_mem_allocated:.2f}GB, GPU已保留: {gpu_mem_reserved:.2f}GB (利用率: {gpu_mem_percent:.1f}%)"
+    
+    logger.info(f"[{stage}] 系统内存使用: {mem_used_gb:.2f}/{mem_total_gb:.2f}GB ({mem_percent}%){gpu_mem_info}")
+
 
 def get_device():
     """检测系统可用硬件，优先使用GPU"""
@@ -97,6 +118,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
     output_excel_path.parent.mkdir(exist_ok=True)
 
     # --- 2. 加载模型 ---    
+    log_memory_usage("模型加载前")
     try:
         model = YOLO(weights_path, task='detect')
         model.to(device)
@@ -105,6 +127,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             model.mode = 'predict'
         logger.info(f'模型已加载至{device}，推理模式确认完成')
         logger.info(f"成功从 {weights_path} 加载模型")
+        log_memory_usage("模型加载后")
     except Exception as e:
         logger.error(f"加载模型失败。错误: {e}")
         return
@@ -157,8 +180,10 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                     warmup_done = True
 
                 # 执行推理
+                log_memory_usage(f"推理子批次 {sub_batch_idx+1} 前")
                 with torch.no_grad():
                     sub_results = model.predict(source=sub_batch_paths, device=device, task='detect', batch=inference_batch_size, half=True, verbose=False)
+                log_memory_usage(f"推理子批次 {sub_batch_idx+1} 后")
 
                 # 处理推理结果
                 for i, res in enumerate(sub_results):
@@ -200,6 +225,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 if device.type == 'cuda':
                     torch.cuda.empty_cache()
                 gc.collect()
+                log_memory_usage(f"推理子批次 {sub_batch_idx+1} 清理后")
                 logger.info(f'推理子批次 {sub_batch_idx+1}/{total_sub_batches} 处理完成，内存已清理')
 
             # 批次处理完成后保存当前结果
@@ -224,6 +250,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             }
 
         # 所有批次处理完成
+        log_memory_usage("所有推理完成后")
         logger.info(f'所有批次推理完成，总耗时 {time.time() - start_time:.2f} 秒')
 
     except Exception as e:
