@@ -38,7 +38,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def log_memory_usage(stage: str):
+def log_memory_usage(stage: str, is_cleanup: bool = False):
     """记录当前GPU和系统内存使用情况"""
     # 记录系统内存使用
     mem = psutil.virtual_memory()
@@ -46,15 +46,19 @@ def log_memory_usage(stage: str):
     mem_total_gb = mem.total / (1024** 3)
     mem_percent = mem.percent
     
-    # 记录GPU内存使用
+    # 记录GPU内存使用情况
     gpu_mem_info = ""
     if torch.cuda.is_available():
         gpu_mem_allocated = torch.cuda.memory_allocated() / (1024 **3)
         gpu_mem_reserved = torch.cuda.memory_reserved() / (1024** 3)
-        gpu_mem_percent = (gpu_mem_allocated / 20) * 100  # 20GB是A4500的总显存
-        gpu_mem_info = f", GPU已分配: {gpu_mem_allocated:.2f}GB, GPU已保留: {gpu_mem_reserved:.2f}GB (利用率: {gpu_mem_percent:.1f}%)"
+        gpu_mem_percent = (gpu_mem_reserved / 20) * 100  # 20GB是A4500的总显存
+        
+        if is_cleanup:
+            gpu_mem_info = f"清理后GPU已保留: {gpu_mem_reserved:.2f}GB (利用率: {gpu_mem_percent:.1f}%)"
+        else:
+            gpu_mem_info = f"系统内存使用: {mem_used_gb:.2f}/{mem_total_gb:.2f}GB ({mem_percent}%), GPU已分配: {gpu_mem_allocated:.2f}GB, GPU已保留: {gpu_mem_reserved:.2f}GB (利用率: {gpu_mem_percent:.1f}%)，"
     
-    logger.info(f"[{stage}] 系统内存使用: {mem_used_gb:.2f}/{mem_total_gb:.2f}GB ({mem_percent}%){gpu_mem_info}")
+    logger.info(f"【{stage}]{gpu_mem_info}")
 
 
 def get_device():
@@ -180,10 +184,11 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                     warmup_done = True
 
                 # 执行推理
-                log_memory_usage(f"推理子批次 {sub_batch_idx+1} 前")
                 with torch.no_grad():
-                    sub_results = model.predict(source=sub_batch_paths, device=device, task='detect', batch=inference_batch_size, half=True, verbose=False)
-                log_memory_usage(f"推理子批次 {sub_batch_idx+1} 后")
+                    sub_results = model.predict(source=sub_batch_paths, device=device, task='detect', batch=inference_batch_size, half=True)
+
+                # 推理后内存状态
+                log_memory_usage(f"子批次 {sub_batch_idx+1}")
 
                 # 处理推理结果
                 for i, res in enumerate(sub_results):
@@ -225,8 +230,11 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 if device.type == 'cuda':
                     torch.cuda.empty_cache()
                 gc.collect()
-                log_memory_usage(f"推理子批次 {sub_batch_idx+1} 清理后")
-                logger.info(f'推理子批次 {sub_batch_idx+1}/{total_sub_batches} 处理完成，内存已清理')
+
+                # 清理后内存状态
+                log_memory_usage(f"子批次 {sub_batch_idx+1}", is_cleanup=True)
+
+                logger.info(f'子批次 {sub_batch_idx+1}/{total_sub_batches} 处理完成，内存已清理')
 
             # 批次处理完成后保存当前结果
             logger.info(f'路径批次 {batch_idx} 处理完成，开始保存中间结果')
