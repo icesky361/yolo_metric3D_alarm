@@ -1,0 +1,248 @@
+# -*- coding: utf-8 -*-
+"""
+================================================================================
+@ 脚本名: infer2.py
+@ 功能: YOLOv11 目标检测模型流式推理脚本
+@ 作者: TraeAI
+@ 创建时间: 2024-07-28
+--------------------------------------------------------------------------------
+@ 脚本逻辑: 实现双层批次架构的流式推理
+1. 路径批次生成器: 流式加载图像路径，避免一次性加载过多路径占用内存
+2. 推理子批次: 将路径批次进一步拆分，适应GPU显存限制
+3. 主动内存管理: 每批处理后显式清理内存
+4. 增量结果保存: 批次处理完立即保存结果，降低数据丢失风险
+================================================================================
+"""
+
+import argparse
+import pandas as pd
+import openpyxl
+from pathlib import Path
+from ultralytics import YOLO
+from tqdm import tqdm
+import torch
+import cv2
+import numpy as np
+from PIL import Image
+import logging
+import gc
+import time
+
+# 配置日志记录器
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+def get_device():
+    """检测系统可用硬件，优先使用GPU"""
+    if torch.cuda.is_available():
+        device = torch.device("cuda:0")
+        gpu_name = torch.cuda.get_device_name(0)
+        logger.info(f"检测到支持CUDA的GPU: {gpu_name}")
+    else:
+        device = torch.device("cpu")
+        logger.info("未找到支持CUDA的GPU。将在CPU上运行。")
+    return device
+
+def image_batch_generator(source_path, valid_extensions, batch_size=250):
+    """生成器函数，流式分批加载图像路径
+    
+    Args:
+        source_path: 图像文件所在目录
+        valid_extensions: 有效的图像文件扩展名集合
+        batch_size: 每批加载的图像路径数量
+    
+    Yields:
+        list: 一批图像路径
+    """
+    batch = []
+    for file in source_path.rglob('*.*'):
+        if file.suffix.lower() in valid_extensions and file.is_file():
+            batch.append(file)
+            if len(batch) >= batch_size:
+                yield batch
+                batch = []
+    # 处理最后一批
+    if batch:
+        yield batch
+
+
+def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
+    """
+    对一个目录中的图像进行流式推理，并将结果保存到Excel文件中。
+
+    Args:
+        weights_path (str): 训练好的模型权重（.pt文件）的路径。
+        source_dir (str): 包含测试图像的目录的路径。
+        output_excel_path (str): 保存结果的Excel文件的路径。
+    """
+    # --- 1. 初始化设置 ---    
+    device = get_device()
+    source_path = Path(source_dir) / 'images'  # 图片文件夹路径
+    if not source_path.exists():
+        logger.error(f"图片文件夹不存在: {source_path}")
+        return
+
+    # 确保输出目录存在
+    output_dir = Path('results')
+    output_dir.mkdir(exist_ok=True)
+    output_images_path = output_dir / 'images'
+    output_images_path.mkdir(exist_ok=True)
+
+    # 设置输出Excel文件路径
+    output_excel_path = Path(output_excel_path)
+    output_excel_path.parent.mkdir(exist_ok=True)
+
+    # --- 2. 加载模型 ---    
+    try:
+        model = YOLO(weights_path, task='detect')
+        model.to(device)
+        model.eval()
+        if hasattr(model, 'mode'):
+            model.mode = 'predict'
+        logger.info(f'模型已加载至{device}，推理模式确认完成')
+        logger.info(f"成功从 {weights_path} 加载模型")
+    except Exception as e:
+        logger.error(f"加载模型失败。错误: {e}")
+        return
+
+    # --- 3. 初始化结果数据结构 ---    
+    results_data = {
+        'original_image_name': [],
+        'annotated_image_name': [],
+        'pred_class': [],
+        'confidence': [],
+        'bbox_xyxy': []
+    }
+
+    # --- 4. 流式批次推理 ---    
+    valid_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
+    image_generator = image_batch_generator(source_path, valid_extensions, batch_size=250)  # 路径批次生成器
+    batch_idx = 0
+    total_batches = None
+    start_time = time.time()
+
+    # 预热模型
+    warmup_done = False
+
+    try:
+        # 第一层循环：处理路径批次
+        for path_batch in image_generator:
+            batch_idx += 1
+            current_batch_size = len(path_batch)
+            logger.info(f'开始处理路径批次 {batch_idx}，共 {current_batch_size} 张图像')
+
+            # 第二层循环：将路径批次拆分为推理子批次
+            inference_batch_size = 16  # 推理子批次大小，可根据GPU显存调整
+            total_sub_batches = (current_batch_size + inference_batch_size - 1) // inference_batch_size
+            logger.info(f'路径批次 {batch_idx} 将拆分为 {total_sub_batches} 个推理子批次')
+
+            # 处理推理子批次
+            for sub_batch_idx in range(total_sub_batches):
+                sub_start = sub_batch_idx * inference_batch_size
+                sub_end = min(sub_start + inference_batch_size, current_batch_size)
+                sub_batch_files = path_batch[sub_start:sub_end]
+                sub_batch_paths = [str(img_path) for img_path in sub_batch_files]
+
+                logger.info(f'处理推理子批次 {sub_batch_idx+1}/{total_sub_batches}，共 {len(sub_batch_paths)} 张图像')
+
+                # 预热模型（仅第一次推理前执行）
+                if not warmup_done and len(sub_batch_paths) > 0:
+                    with torch.no_grad():
+                        model.predict(source=sub_batch_paths[0], device=device, task='detect', batch=1, verbose=False)
+                    logger.info('模型预热完成')
+                    warmup_done = True
+
+                # 执行推理
+                with torch.no_grad():
+                    sub_results = model.predict(source=sub_batch_paths, device=device, task='detect', batch=inference_batch_size, verbose=False)
+
+                # 处理推理结果
+                for i, res in enumerate(sub_results):
+                    img_path = sub_batch_files[i]
+                    names = res.names
+
+                    # 生成标注图像
+                    original_image = Image.open(img_path).convert('RGB')
+                    original_array = np.array(original_image)
+                    annotated_image = res.plot(img=original_array)
+
+                    # 保存标注图像
+                    filename = img_path.stem
+                    extension = img_path.suffix
+                    new_filename = f"{filename}_tl{extension}"
+                    Image.fromarray(annotated_image).save(output_images_path / new_filename)
+
+                    # 解析检测结果
+                    if res.boxes is not None and len(res.boxes) > 0:
+                        for box in res.boxes:
+                            class_id = int(box.cls)
+                            confidence = float(box.conf)
+                            bbox_coords = box.xyxy[0].cpu().numpy().astype(int).tolist()
+
+                            results_data['original_image_name'].append(img_path.name)
+                            results_data['annotated_image_name'].append(new_filename)
+                            results_data['pred_class'].append(names[class_id])
+                            results_data['confidence'].append(round(confidence, 4))
+                            results_data['bbox_xyxy'].append(",".join(map(str, bbox_coords)))
+                    else:
+                        results_data['original_image_name'].append(img_path.name)
+                        results_data['annotated_image_name'].append(new_filename)
+                        results_data['pred_class'].append('未检测到')
+                        results_data['confidence'].append(0.0)
+                        results_data['bbox_xyxy'].append('')
+
+                # 子批次处理后立即清理内存
+                del sub_results
+                if device.type == 'cuda':
+                    torch.cuda.empty_cache()
+                gc.collect()
+                logger.info(f'推理子批次 {sub_batch_idx+1}/{total_sub_batches} 处理完成，内存已清理')
+
+            # 批次处理完成后保存当前结果
+            logger.info(f'路径批次 {batch_idx} 处理完成，开始保存中间结果')
+            results_df = pd.DataFrame(results_data)
+            results_agg_df = results_df.groupby(['original_image_name', 'annotated_image_name']).agg({
+                'pred_class': lambda x: '; '.join(x),
+                'confidence': lambda x: '; '.join(map(str, x)),
+                'bbox_xyxy': lambda x: '; '.join(x)
+            }).reset_index()
+            results_agg_df[['pred_class', 'confidence', 'bbox_xyxy']] = results_agg_df[['pred_class', 'confidence', 'bbox_xyxy']].fillna('No Detection')
+            results_agg_df.to_excel(output_excel_path, index=False)
+            logger.info(f'路径批次 {batch_idx} 中间结果已保存至 {output_excel_path.resolve()}')
+
+            # 重置结果数据结构，只保留当前批次数据用于聚合
+            results_data = {
+                'original_image_name': [],
+                'annotated_image_name': [],
+                'pred_class': [],
+                'confidence': [],
+                'bbox_xyxy': []
+            }
+
+        # 所有批次处理完成
+        logger.info(f'所有批次推理完成，总耗时 {time.time() - start_time:.2f} 秒')
+
+    except Exception as e:
+        logger.error(f"推理过程中发生错误: {e}", exc_info=True)
+        if device.type == 'cuda':
+            torch.cuda.empty_cache()
+        gc.collect()
+
+if __name__ == '__main__':
+    # --- 命令行参数解析 ---
+    parser = argparse.ArgumentParser(description="运行YOLOv11分割模型流式推理。")
+    # 默认路径配置
+    default_weights = 'G:/soft/soft/python project/Yolo_metric_alarm/Yolo_seg_Alarm/gemini/yolo_seg_alarm/train2_results/weights/best.pt'
+    default_source = 'D:/20250804'
+    default_excel = 'G:/soft/soft/python project/Yolo_metric_alarm/Data/test/your_excel_file.xlsx'
+    
+    parser.add_argument('--weights', type=str, default=default_weights, help='模型权重文件路径 (默认: %(default)s)')
+    parser.add_argument('--source', type=str, default=default_source, help='测试图片所在文件夹路径 (默认: %(default)s)')
+    parser.add_argument('--output_excel', type=str, default=default_excel, help='结果Excel文件路径 (默认: %(default)s)')
+
+    args = parser.parse_args()
+    run_inference(args.weights, args.source, args.output_excel)
