@@ -158,7 +158,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
     image_generator = image_batch_generator(source_path, valid_extensions, batch_size=720)  # 流式生成器
     
     # 初始化进度跟踪
-    progress_bar = tqdm(total=total_images, desc="总体推理进度", unit="张")  # 设置total参数
+    progress_bar = tqdm(total=total_images, desc="总体推理进度", unit="张", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} 张 ({percentage:.1f}%) [{elapsed}<{remaining}, {rate_fmt}{postfix}]")
     processed_images = 0
     processed_batches = 0
     
@@ -251,7 +251,6 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 logger.info(f'子批次 {sub_batch_idx+1}/{total_sub_batches} 处理完成，内存已清理')
                 processed_images += len(sub_batch_paths)
                 progress_bar.update(len(sub_batch_paths))
-                progress_bar.set_postfix_str(f"已处理: {processed_images}张")
 
             # 批次处理完成后保存当前结果
             logger.info(f'路径批次 {batch_idx} 处理完成，开始保存中间结果')
