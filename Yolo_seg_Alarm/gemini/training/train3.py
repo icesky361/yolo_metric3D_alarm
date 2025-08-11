@@ -45,7 +45,9 @@ def prepare_data_paths(config):
     return train_path, val_path
 
 # 保存训练进度
+# 修改save_progress调用条件
 def save_progress(epoch, model, results, config):
+    # 每轮都保存进度信息
     progress = {
         'epoch': epoch,
         'best_epoch': results.best_epoch,
@@ -60,6 +62,7 @@ def save_progress(epoch, model, results, config):
 
     # 保存中间模型
     checkpoint_path = PROGRESS_DIR / f'checkpoint_epoch_{epoch}.pt'
+    # 模型权重仍保持每5轮保存一次
     if epoch % 5 == 0 or epoch == config['epochs']:
         model.save(PROGRESS_DIR / f'checkpoint_epoch{epoch}.pt')
         print(f"已保存第 {epoch} 轮进度和模型到 {PROGRESS_DIR}")
