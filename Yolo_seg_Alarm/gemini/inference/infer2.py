@@ -147,9 +147,22 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
 
     # --- 4. 流式批次推理 ---    
     valid_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
-    image_generator = image_batch_generator(source_path, valid_extensions, batch_size=720)  # 路径批次生成器
+    
+    # 快速统计总图片数量（仅计数，不加载路径）
+    total_images = 0
+    for file in source_path.rglob('*.*'):
+        if file.suffix.lower() in valid_extensions and file.is_file():
+            total_images += 1
+    logger.info(f"发现 {total_images} 张图片")
+    
+    image_generator = image_batch_generator(source_path, valid_extensions, batch_size=720)  # 流式生成器
+    
+    # 初始化进度跟踪
+    progress_bar = tqdm(total=total_images, desc="总体推理进度", unit="张")  # 设置total参数
+    processed_images = 0
+    processed_batches = 0
+    
     batch_idx = 0
-    total_batches = None
     start_time = time.time()
 
     # 预热模型
@@ -236,6 +249,9 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 log_memory_usage(f"子批次 {sub_batch_idx+1}", is_cleanup=True)
 
                 logger.info(f'子批次 {sub_batch_idx+1}/{total_sub_batches} 处理完成，内存已清理')
+                processed_images += len(sub_batch_paths)
+                progress_bar.update(len(sub_batch_paths))
+                progress_bar.set_postfix_str(f"已处理: {processed_images}张")
 
             # 批次处理完成后保存当前结果
             logger.info(f'路径批次 {batch_idx} 处理完成，开始保存中间结果')
@@ -248,6 +264,12 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             results_agg_df[['pred_class', 'confidence', 'bbox_xyxy']] = results_agg_df[['pred_class', 'confidence', 'bbox_xyxy']].fillna('No Detection')
             results_agg_df.to_excel(output_excel_path, index=False)
             logger.info(f'路径批次 {batch_idx} 中间结果已保存至 {output_excel_path.resolve()}')
+            # 每10个批次输出一次进度信息
+            processed_batches += 1
+            if processed_batches % 10 == 0:
+                logger.info(f"进度更新: 已完成 {processed_batches} 个路径批次，处理了 {processed_images} 张图片")
+            # 删除旧的进度更新行
+
             # 计算处理时间和性能指标
             batch_end_time = time.time()
             batch_duration = batch_end_time - batch_start_time
@@ -271,6 +293,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
         # 所有批次处理完成
         log_memory_usage("所有推理完成后")
         logger.info(f'所有批次推理完成，总耗时 {time.time() - start_time:.2f} 秒')
+        progress_bar.close()
 
     except Exception as e:
         logger.error(f"推理过程中发生错误: {e}", exc_info=True)
