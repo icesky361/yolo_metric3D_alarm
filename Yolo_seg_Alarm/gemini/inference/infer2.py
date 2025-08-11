@@ -259,6 +259,8 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
 
                 # 清理后内存状态
                 log_memory_usage(f"子批次 {sub_batch_idx+1}", is_cleanup=True)
+
+                logger.info(f'子批次 {sub_batch_idx+1}/{total_sub_batches} 处理完成，内存已清理')
                 processed_images += len(sub_batch_paths)
             # 批次处理完成后保存当前结果
             logger.info(f'路径批次 {batch_idx} 处理完成，开始保存中间结果')
