@@ -68,7 +68,7 @@ def get_device():
         logger.info("未找到支持CUDA的GPU。将在CPU上运行。")
     return device
 
-def image_batch_generator(source_path, valid_extensions, batch_size=720):
+def image_batch_generator(source_path, valid_extensions, batch_size=640):
     """生成器函数，流式分批加载图像路径
     
     Args:
@@ -167,7 +167,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 total_images += 1
     logger.info(f"发现 {total_images} 张图片")
     
-    image_generator = image_batch_generator(source_path, valid_extensions, batch_size=720)  # 流式生成器
+    image_generator = image_batch_generator(source_path, valid_extensions, batch_size=640)  # 流式生成器
     
     # 初始化进度跟踪
     progress_bar = tqdm(total=total_images, desc="总体推理进度", unit="张", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} 张 ({percentage:.1f}%) [{elapsed}<{remaining}, {rate_fmt}{postfix}]")
@@ -189,7 +189,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             batch_start_time = time.time()
 
             # 第二层循环：将路径批次拆分为推理子批次
-            inference_batch_size = 64  # 推理子批次大小，针对20GB A4500优化
+            inference_batch_size = 128  # 推理子批次大小，针对20GB A4500优化
             total_sub_batches = (current_batch_size + inference_batch_size - 1) // inference_batch_size
             logger.info(f'路径批次 {batch_idx} 将拆分为 {total_sub_batches} 个推理子批次')
 
@@ -263,16 +263,17 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 logger.info(f'子批次 {sub_batch_idx+1}/{total_sub_batches} 处理完成，内存已清理')
                 processed_images += len(sub_batch_paths)
             # 批次处理完成后保存当前结果
-            logger.info(f'路径批次 {batch_idx} 处理完成，开始保存中间结果')
+            # 在run_inference函数顶部添加
+            output_csv_path = output_excel_path.with_suffix('.csv')
+            
+            # 替换原来的Excel保存代码
             results_df = pd.DataFrame(results_data)
-            results_agg_df = results_df.groupby(['original_image_name', 'annotated_image_name']).agg({
-                'pred_class': lambda x: '; '.join(x),
-                'confidence': lambda x: '; '.join(map(str, x)),
-                'bbox_xyxy': lambda x: '; '.join(x)
-            }).reset_index()
-            results_agg_df[['pred_class', 'confidence', 'bbox_xyxy']] = results_agg_df[['pred_class', 'confidence', 'bbox_xyxy']].fillna('No Detection')
-            results_agg_df.to_excel(output_excel_path, index=False)
-            logger.info(f'路径批次 {batch_idx} 中间结果已保存至 {output_excel_path.resolve()}')
+            if not output_csv_path.exists():
+                results_df.to_csv(output_csv_path, index=False, mode='w', header=True)
+            else:
+                results_df.to_csv(output_csv_path, index=False, mode='a', header=False)
+            
+            logger.info(f'路径批次 {batch_idx} 中间结果已追加至 {output_csv_path.resolve()}')
             # 每10个批次输出一次进度信息
             processed_batches += 1
             progress_bar.update(current_batch_size)
