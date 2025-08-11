@@ -148,11 +148,27 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
     # --- 4. 流式批次推理 ---    
     valid_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
     
-    # 快速统计总图片数量（仅计数，不加载路径）
-    total_images = 0
-    for file in source_path.rglob('*.*'):
-        if file.suffix.lower() in valid_extensions and file.is_file():
-            total_images += 1
+    # 快速统计总图片数量（带进度反馈）
+    # 与用户交互获取预估总图片数
+    while True:
+        try:
+            total_images_input = input("请输入待处理图片的预估总数: ")
+            total_images = int(total_images_input)
+            if total_images > 0:
+                break
+            print("请输入大于0的有效数字")
+        except ValueError:
+            print("输入无效，请输入一个整数")
+    logger.info(f"用户指定的预估总图片数: {total_images} 张")
+    valid_extensions_set = {ext.lower() for ext in valid_extensions}
+    # 使用tqdm添加计数进度条
+    # 使用特定扩展名glob模式加速搜索
+    ext_pattern = '**/*.{{{}}}'.format(','.join(ext[1:] for ext in valid_extensions))
+    with tqdm(desc="图片计数中", unit="个文件") as count_pbar:
+        for file in source_path.rglob(ext_pattern):
+            count_pbar.update(1)
+            if file.is_file():
+                total_images += 1
     logger.info(f"发现 {total_images} 张图片")
     
     image_generator = image_batch_generator(source_path, valid_extensions, batch_size=720)  # 流式生成器
@@ -250,8 +266,6 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
 
                 logger.info(f'子批次 {sub_batch_idx+1}/{total_sub_batches} 处理完成，内存已清理')
                 processed_images += len(sub_batch_paths)
-                progress_bar.update(len(sub_batch_paths))
-
             # 批次处理完成后保存当前结果
             logger.info(f'路径批次 {batch_idx} 处理完成，开始保存中间结果')
             results_df = pd.DataFrame(results_data)
@@ -264,8 +278,10 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             results_agg_df.to_excel(output_excel_path, index=False)
             logger.info(f'路径批次 {batch_idx} 中间结果已保存至 {output_excel_path.resolve()}')
             # 每10个批次输出一次进度信息
+            processed_images += current_batch_size
             processed_batches += 1
             if processed_batches % 10 == 0:
+                progress_bar.update(current_batch_size)
                 logger.info(f"进度更新: 已完成 {processed_batches} 个路径批次，处理了 {processed_images} 张图片")
             # 删除旧的进度更新行
 
