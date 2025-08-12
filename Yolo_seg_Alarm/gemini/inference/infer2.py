@@ -194,7 +194,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             batch_start_time = time.time()
 
             # 第二层循环：将路径批次拆分为推理子批次
-            inference_batch_size = 64  # 推理子批次大小，从112调整为64以降低显存占用
+            inference_batch_size = 112  # 推理子批次大小，针对20GB A4500优化
             total_sub_batches = (current_batch_size + inference_batch_size - 1) // inference_batch_size
             logger.info(f'路径批次 {batch_idx} 将拆分为 {total_sub_batches} 个推理子批次')
 
@@ -244,6 +244,8 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                             new_filename = f"{filename}_tl{extension}"
                             Image.fromarray(annotated_image).save(output_images_path / new_filename)
                         
+                        # 显式释放图像资源
+                        del original_image, original_array, annotated_image
                         for box in res.boxes:
                             class_id = int(box.cls)
                             confidence = float(box.conf)
@@ -261,17 +263,19 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                         results_data['confidence'].append(0.0)
                         results_data['bbox_xyxy'].append('')
 
+                # 保存子批次大小用于进度更新
+                sub_batch_size = len(sub_batch_paths)
                 # 子批次处理后立即清理内存
-                del sub_results, sub_batch_paths
+                del sub_results, sub_batch_files
                 if device.type == 'cuda':
                     torch.cuda.empty_cache()
-                gc.collect()
+                gc.collect()  # 强制垃圾回收
 
                 # 清理后内存状态
                 log_memory_usage(f"子批次 {sub_batch_idx+1}", is_cleanup=True)
 
                 logger.info(f'子批次 {sub_batch_idx+1}/{total_sub_batches} 处理完成，内存已清理')
-                processed_images += len(sub_batch_paths)
+                processed_images += sub_batch_size
             # 批次处理完成后保存当前结果
             # 在run_inference函数顶部添加
             output_csv_path = output_excel_path.with_suffix('.csv')
