@@ -96,16 +96,16 @@ def image_batch_generator(source_path, valid_extensions, batch_size=672):
         yield batch
 
 
-def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
+def run_inference(weights_path: str, source_dir: str, output_csv_path: str):
     """
-    对一个目录中的图像进行流式推理，并将结果保存到Excel文件中。
+    对一个目录中的图像进行流式推理，并将结果保存到CSV文件中。
 
     Args:
         weights_path (str): 训练好的模型权重（.pt文件）的路径。
         source_dir (str): 包含测试图像的目录的路径。
-        output_excel_path (str): 保存结果的Excel文件的路径。
+        output_csv_path (str): 保存结果的CSV文件的路径。
     """
-    # --- 1. 初始化设置 ---    
+    # --- 1. 初始化设置 ---
     device = get_device()
     source_path = Path(source_dir) / 'images'  # 图片文件夹路径
     if not source_path.exists():
@@ -118,9 +118,9 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
     output_images_path = output_dir / 'images'
     output_images_path.mkdir(exist_ok=True)
 
-    # 设置输出Excel文件路径
-    output_excel_path = Path(output_excel_path)
-    output_excel_path.parent.mkdir(exist_ok=True)
+    # 设置输出CSV文件路径
+    output_csv_path = Path(output_csv_path)
+    output_csv_path.parent.mkdir(exist_ok=True)
 
     # --- 2. 加载模型 ---    
     log_memory_usage("模型加载前")
@@ -145,6 +145,20 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
         'confidence': [],
         'bbox_xyxy': []
     }
+
+    # --- 断点续跑功能 ---    
+    processed_images = set()
+    processed_count = 0  # 添加计数器变量
+    if output_csv_path.exists():
+        try:
+            # 读取已处理的图像名称和路径
+            df = pd.read_csv(output_csv_path)
+            # 使用完整路径作为唯一标识
+            processed_images = set(df['original_image_name'].unique())
+            processed_count = len(processed_images)  # 使用专用计数器
+            logger.info(f'已加载进度文件，发现 {processed_count} 张已处理图像，将跳过这些图像')
+        except Exception as e:
+            logger.warning(f'读取进度文件失败，将从头开始处理: {e}')
 
     # --- 4. 流式批次推理 ---    
     valid_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
@@ -203,6 +217,22 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 sub_start = sub_batch_idx * inference_batch_size
                 sub_end = min(sub_start + inference_batch_size, current_batch_size)
                 sub_batch_files = path_batch[sub_start:sub_end]
+                
+                # 过滤已处理图像
+                if isinstance(processed_images, set):
+                    sub_batch_files = [f for f in sub_batch_files if f.name not in processed_images]
+                else:
+                    logger.error(f'processed_images 不是集合类型，当前类型: {type(processed_images)}')
+                    sub_batch_files = []
+                remaining_count = len(sub_batch_files)
+                total_count = sub_end - sub_start
+                if remaining_count == 0:
+                    logger.info(f'子批次 {sub_batch_idx+1}/{total_sub_batches} 所有 {total_count} 张图像已处理，跳过')
+                else:
+                    logger.info(f'子批次 {sub_batch_idx+1}/{total_sub_batches} 发现 {total_count - remaining_count} 张已处理图像，将处理剩余 {remaining_count} 张')
+                if not sub_batch_files:
+                    continue
+                
                 sub_batch_paths = [str(img_path) for img_path in sub_batch_files]
 
                 logger.info(f'处理推理子批次 {sub_batch_idx+1}/{total_sub_batches}，共 {len(sub_batch_paths)} 张图像')
@@ -277,10 +307,6 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 logger.info(f'子批次 {sub_batch_idx+1}/{total_sub_batches} 处理完成，内存已清理')
                 processed_images += sub_batch_size
             # 批次处理完成后保存当前结果
-            # 在run_inference函数顶部添加
-            output_csv_path = output_excel_path.with_suffix('.csv')
-            
-            # 替换原来的Excel保存代码
             results_df = pd.DataFrame(results_data)
             if not output_csv_path.exists():
                 results_df.to_csv(output_csv_path, index=False, mode='w', header=True)
@@ -331,11 +357,11 @@ if __name__ == '__main__':
     # 默认路径配置
     default_weights = 'G:/soft/soft/python project/Yolo_metric_alarm/Yolo_seg_Alarm/gemini/yolo_seg_alarm/train2_results/weights/best.pt'
     default_source = 'D:/20250804'
-    default_excel = 'G:/soft/soft/python project/Yolo_metric_alarm/Data/test/your_excel_file.xlsx'
+    default_csv = 'G:/soft/soft/python project/Yolo_metric_alarm/Data/test/your_excel_file.csv'
     
     parser.add_argument('--weights', type=str, default=default_weights, help='模型权重文件路径 (默认: %(default)s)')
     parser.add_argument('--source', type=str, default=default_source, help='测试图片所在文件夹路径 (默认: %(default)s)')
-    parser.add_argument('--output_excel', type=str, default=default_excel, help='结果Excel文件路径 (默认: %(default)s)')
+    parser.add_argument('--output_csv', type=str, default=default_csv, required=False, help='输出CSV文件路径')
 
     args = parser.parse_args()
-    run_inference(args.weights, args.source, args.output_excel)
+    run_inference(args.weights, args.source, args.output_csv)
