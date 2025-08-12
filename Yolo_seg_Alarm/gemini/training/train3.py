@@ -50,10 +50,14 @@ def save_progress(epoch, model, results, config):
     # 每轮都保存进度信息
     progress = {
         'epoch': epoch,
-        'best_epoch': results.best_epoch,
-        'best_map': float(results.best_map),
+        'epochs_completed': epoch,
+        'time': time.time(),
+        'good_epoch': results.good_epoch,
+        'good_map': float(results.good_map),
         'last_epoch': results.epoch,
-        'timestamp': datetime.now().isoformat()
+        'timestamp': datetime.now().isoformat(),
+        'last_weights': str(PROGRESS_DIR / f'checkpoint_epoch{epoch}.pt'),
+        'good_weights': str(PROGRESS_DIR / f'good_epoch{epoch}.pt')
     }
 
     # 保存进度文件
@@ -62,10 +66,16 @@ def save_progress(epoch, model, results, config):
 
     # 保存中间模型
     checkpoint_path = PROGRESS_DIR / f'checkpoint_epoch_{epoch}.pt'
-    # 模型权重仍保持每5轮保存一次
-    if epoch % 5 == 0 or epoch == config['epochs']:
-        model.save(PROGRESS_DIR / f'checkpoint_epoch{epoch}.pt')
-        print(f"已保存第 {epoch} 轮进度和模型到 {PROGRESS_DIR}")
+    # 保存当前权重
+    model.save(PROGRESS_DIR / f'checkpoint_epoch{epoch}.pt')
+    # 保存最佳权重
+    shutil.copyfile(results.good, str(PROGRESS_DIR / f'good_epoch{epoch}.pt'))
+    # 同时更新根目录下的权重文件
+    final_model_path = Path(config['model_path']) / 'weights' / 'yolo_seg_alarm_train3_final.pt'
+    good_model_path = Path(config['model_path']) / 'weights' / 'yolo_seg_alarm_train3_good.pt'
+    model.save(str(final_model_path))
+    shutil.copyfile(results.good, str(good_model_path))
+    print(f"已保存第 {epoch} 轮进度和模型到 {PROGRESS_DIR} 和根目录")
 
 # 加载训练进度
 def load_progress():
@@ -145,15 +155,11 @@ def main():
     print(f"最终模型已保存到 {final_model_path}")
 
     # 保存最佳模型
-    best_model_path = Path(config['model_path']) / 'weights' / 'yolo_seg_alarm_train3_best.pt'
-    shutil.copyfile(results.best, str(best_model_path))
-    print(f"最佳模型已保存到 {best_model_path}")
+    good_model_path = Path(config['model_path']) / 'weights' / 'yolo_seg_alarm_train3_good.pt'
+    shutil.copyfile(results.good, str(good_model_path))
+    print(f"最佳模型已保存到 {good_model_path}")
 
-    # 清理临时文件
-    # for split in ['train', 'val']:
-    #     label_dir = base_path / split / 'labels'
-    #     if label_dir.exists():
-    #         shutil.rmtree(label_dir)
+
 
     print("训练完成，已清理临时文件")
 
