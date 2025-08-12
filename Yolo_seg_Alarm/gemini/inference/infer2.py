@@ -204,13 +204,17 @@ def run_inference(weights_path: str, source_dir: str, output_csv_path: str):
         for path_batch in image_generator:
             batch_idx += 1
             current_batch_size = len(path_batch)
-            logger.info(f'开始处理路径批次 {batch_idx}，共 {current_batch_size} 张图像')
+            # 只在每5个路径批次输出详细信息
+            if batch_idx % 5 == 0:
+                logger.info(f'开始处理路径批次 {batch_idx}，共 {current_batch_size} 张图像')
             batch_start_time = time.time()
-
+            
             # 第二层循环：将路径批次拆分为推理子批次
             inference_batch_size = 112  # 推理子批次大小，针对20GB A4500优化
             total_sub_batches = (current_batch_size + inference_batch_size - 1) // inference_batch_size
-            logger.info(f'路径批次 {batch_idx} 将拆分为 {total_sub_batches} 个推理子批次')
+            # 只在每5个路径批次输出拆分信息
+            if batch_idx % 5 == 0:
+                logger.info(f'路径批次 {batch_idx} 将拆分为 {total_sub_batches} 个推理子批次')
 
             # 处理推理子批次
             for sub_batch_idx in range(total_sub_batches):
@@ -234,6 +238,15 @@ def run_inference(weights_path: str, source_dir: str, output_csv_path: str):
                     continue
                 
                 sub_batch_paths = [str(img_path) for img_path in sub_batch_files]
+
+                # 每5个路径批次才输出跳过信息
+                if batch_idx % 5 == 0:
+                    if remaining_count == 0:
+                        logger.info(f'路径批次 {batch_idx} 子批次 {sub_batch_idx+1}/{total_sub_batches} 所有图像已处理，跳过')
+                    else:
+                        logger.info(f'路径批次 {batch_idx} 子批次 {sub_batch_idx+1}/{total_sub_batches} 处理剩余 {remaining_count} 张图像')
+                if not sub_batch_files:
+                    continue
 
                 logger.info(f'处理推理子批次 {sub_batch_idx+1}/{total_sub_batches}，共 {len(sub_batch_paths)} 张图像')
 
