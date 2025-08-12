@@ -68,7 +68,7 @@ def get_device():
         logger.info("未找到支持CUDA的GPU。将在CPU上运行。")
     return device
 
-def image_batch_generator(source_path, valid_extensions, batch_size=640):
+def image_batch_generator(source_path, valid_extensions, batch_size=672):
     """生成器函数，流式分批加载图像路径
     
     Args:
@@ -167,7 +167,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                 total_images += 1
     logger.info(f"发现 {total_images} 张图片")
     
-    image_generator = image_batch_generator(source_path, valid_extensions, batch_size=640)  # 流式生成器
+    image_generator = image_batch_generator(source_path, valid_extensions, batch_size=672)  # 流式生成器
     
     # 初始化进度跟踪
     progress_bar = tqdm(total=total_images, desc="总体推理进度", unit="张", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} 张 ({percentage:.1f}%) [{elapsed}<{remaining}, {rate_fmt}{postfix}]")
@@ -189,7 +189,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             batch_start_time = time.time()
 
             # 第二层循环：将路径批次拆分为推理子批次
-            inference_batch_size = 128  # 推理子批次大小，针对20GB A4500优化
+            inference_batch_size = 96  # 推理子批次大小，针对20GB A4500优化
             total_sub_batches = (current_batch_size + inference_batch_size - 1) // inference_batch_size
             logger.info(f'路径批次 {batch_idx} 将拆分为 {total_sub_batches} 个推理子批次')
 
