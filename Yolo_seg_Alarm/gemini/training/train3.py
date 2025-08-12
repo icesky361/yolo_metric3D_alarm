@@ -14,10 +14,16 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 from utils.environment import get_device_and_adjust_config
 
 # 进度保存目录
-PROGRESS_DIR = Path(__file__).parent / 'progress'
-PROGRESS_FILE = PROGRESS_DIR / 'train_progress.json'
+def get_progress_file_path():
+    """获取进度文件路径"""
+    current_dir = Path(__file__).parent
+    progress_dir = current_dir / 'progress'
+    progress_dir.mkdir(exist_ok=True)
+    return progress_dir / 'train_progress.json'
 
-# 创建进度目录
+PROGRESS_DIR = Path(__file__).parent / 'progress'
+PROGRESS_FILE = get_progress_file_path()
+
 PROGRESS_DIR.mkdir(exist_ok=True)
 
 # 1. 加载YAML配置文件
