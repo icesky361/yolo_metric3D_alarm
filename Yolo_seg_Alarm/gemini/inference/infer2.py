@@ -194,7 +194,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             batch_start_time = time.time()
 
             # 第二层循环：将路径批次拆分为推理子批次
-            inference_batch_size = 112  # 推理子批次大小，针对20GB A4500优化
+            inference_batch_size = 64  # 推理子批次大小，从112调整为64以降低显存占用
             total_sub_batches = (current_batch_size + inference_batch_size - 1) // inference_batch_size
             logger.info(f'路径批次 {batch_idx} 将拆分为 {total_sub_batches} 个推理子批次')
 
@@ -228,22 +228,27 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
 
                     # 解析检测结果
                     if res.boxes is not None and len(res.boxes) > 0:
+                        # 检查是否有置信度>=0.3的检测框
+                        has_high_confidence = any(box.conf >= 0.3 for box in res.boxes)
+                        
                         # 生成标注图像
                         original_image = Image.open(img_path).convert('RGB')
                         original_array = np.array(original_image)
                         annotated_image = res.plot(img=original_array)
-
-                        # 保存标注图像
-                        filename = img_path.stem
-                        extension = img_path.suffix
-                        new_filename = f"{filename}_tl{extension}"
-                        Image.fromarray(annotated_image).save(output_images_path / new_filename)
-
+                        
+                        # 保存标注图像（仅当有高置信度检测框时）
+                        new_filename = ''
+                        if has_high_confidence:
+                            filename = img_path.stem
+                            extension = img_path.suffix
+                            new_filename = f"{filename}_tl{extension}"
+                            Image.fromarray(annotated_image).save(output_images_path / new_filename)
+                        
                         for box in res.boxes:
                             class_id = int(box.cls)
                             confidence = float(box.conf)
                             bbox_coords = box.xyxy[0].cpu().numpy().astype(int).tolist()
-
+                        
                             results_data['original_image_name'].append(img_path.name)
                             results_data['annotated_image_name'].append(new_filename)
                             results_data['pred_class'].append(names[class_id])
@@ -257,7 +262,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                         results_data['bbox_xyxy'].append('')
 
                 # 子批次处理后立即清理内存
-                del sub_results
+                del sub_results, sub_batch_paths
                 if device.type == 'cuda':
                     torch.cuda.empty_cache()
                 gc.collect()
