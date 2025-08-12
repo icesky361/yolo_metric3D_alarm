@@ -23,7 +23,7 @@ from tqdm import tqdm
 import torch
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 import logging
 import gc
 import time
@@ -82,10 +82,15 @@ def image_batch_generator(source_path, valid_extensions, batch_size=672):
     batch = []
     for file in source_path.rglob('*.*'):
         if file.suffix.lower() in valid_extensions and file.is_file():
-            batch.append(file)
-            if len(batch) >= batch_size:
-                yield batch
-                batch = []
+            try:
+                # 验证文件是否可打开
+                with Image.open(file):
+                    batch.append(file)
+                    if len(batch) >= batch_size:
+                        yield batch
+                        batch = []
+            except UnidentifiedImageError:
+                logger.warning(f"跳过无效图像文件: {file}")
     # 处理最后一批
     if batch:
         yield batch
@@ -189,7 +194,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
             batch_start_time = time.time()
 
             # 第二层循环：将路径批次拆分为推理子批次
-            inference_batch_size = 96  # 推理子批次大小，针对20GB A4500优化
+            inference_batch_size = 112  # 推理子批次大小，针对20GB A4500优化
             total_sub_batches = (current_batch_size + inference_batch_size - 1) // inference_batch_size
             logger.info(f'路径批次 {batch_idx} 将拆分为 {total_sub_batches} 个推理子批次')
 
