@@ -190,7 +190,7 @@ def run_inference(weights_path: str, source_dir: str, output_csv_path: str):
     
     # 初始化进度跟踪
     progress_bar = tqdm(total=total_images, desc="总体推理进度", unit="张", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} 张 ({percentage:.1f}%) [{elapsed}<{remaining}, {rate_fmt}{postfix}]")
-    processed_images = 0
+    processed_count = 0  # 重命名计数器变量，避免与processed_images集合冲突
     processed_batches = 0
     
     batch_idx = 0
@@ -305,7 +305,7 @@ def run_inference(weights_path: str, source_dir: str, output_csv_path: str):
                 log_memory_usage(f"子批次 {sub_batch_idx+1}", is_cleanup=True)
 
                 logger.info(f'子批次 {sub_batch_idx+1}/{total_sub_batches} 处理完成，内存已清理')
-                processed_images += sub_batch_size
+                processed_count += sub_batch_size  # 更新计数器变量
             # 批次处理完成后保存当前结果
             results_df = pd.DataFrame(results_data)
             if not output_csv_path.exists():
@@ -317,7 +317,7 @@ def run_inference(weights_path: str, source_dir: str, output_csv_path: str):
             # 每10个批次输出一次进度信息
             processed_batches += 1
             progress_bar.update(current_batch_size)
-            logger.info(f"进度更新: 已完成 {processed_batches} 个路径批次，处理了 {processed_images} 张图片")
+            logger.info(f"进度更新: 已完成 {processed_batches} 个路径批次，处理了 {processed_count} 张图片")
             # 删除旧的进度更新行
 
             # 计算处理时间和性能指标
