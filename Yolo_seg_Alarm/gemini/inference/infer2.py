@@ -149,6 +149,7 @@ def run_inference(weights_path: str, source_dir: str, output_csv_path: str):
     # --- 断点续跑功能 ---    
     processed_images = set()
     processed_count = 0  # 添加计数器变量
+    is_resuming = False  # 初始化断点标识为默认False
     if output_csv_path.exists():
         try:
             # 读取已处理的图像名称和路径
@@ -157,6 +158,7 @@ def run_inference(weights_path: str, source_dir: str, output_csv_path: str):
             processed_images = set(df['original_image_name'].unique())
             processed_count = len(processed_images)  # 使用专用计数器
             logger.info(f'已加载进度文件，发现 {processed_count} 张已处理图像，将跳过这些图像')
+            is_resuming = processed_count > 0  # 移至此处定义断点标识
         except Exception as e:
             logger.warning(f'读取进度文件失败，将从头开始处理: {e}')
 
@@ -189,10 +191,11 @@ def run_inference(weights_path: str, source_dir: str, output_csv_path: str):
     image_generator = image_batch_generator(source_path, valid_extensions, batch_size=672)  # 流式生成器
     
     # 初始化进度跟踪
-    progress_bar = tqdm(total=total_images, desc="总体推理进度", unit="张", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} 张 ({percentage:.1f}%) [{elapsed}<{remaining}, {rate_fmt}{postfix}]")
-    processed_count = 0  # 重命名计数器变量，避免与processed_images集合冲突
+    progress_bar = None
+    if is_resuming:
+        progress_bar = tqdm(total=total_images, desc="总体推理进度", unit="张", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} 张 ({percentage:.1f}%) [{elapsed}<{remaining}, {rate_fmt}{postfix}]")
     processed_batches = 0
-    
+
     batch_idx = 0
     start_time = time.time()
 
@@ -204,16 +207,13 @@ def run_inference(weights_path: str, source_dir: str, output_csv_path: str):
         for path_batch in image_generator:
             batch_idx += 1
             current_batch_size = len(path_batch)
-            # 只在每5个路径批次输出详细信息
-            if batch_idx % 5 == 0:
-                logger.info(f'开始处理路径批次 {batch_idx}，共 {current_batch_size} 张图像')
             batch_start_time = time.time()
-            
+
             # 第二层循环：将路径批次拆分为推理子批次
             inference_batch_size = 112  # 推理子批次大小，针对20GB A4500优化
             total_sub_batches = (current_batch_size + inference_batch_size - 1) // inference_batch_size
             # 只在每5个路径批次输出拆分信息
-            if batch_idx % 5 == 0:
+            if is_resuming and batch_idx % 5 == 0:
                 logger.info(f'路径批次 {batch_idx} 将拆分为 {total_sub_batches} 个推理子批次')
 
             # 处理推理子批次
@@ -223,38 +223,24 @@ def run_inference(weights_path: str, source_dir: str, output_csv_path: str):
                 sub_batch_files = path_batch[sub_start:sub_end]
                 
                 # 过滤已处理图像
-                if isinstance(processed_images, set):
+                if is_resuming and isinstance(processed_images, set):
                     sub_batch_files = [f for f in sub_batch_files if f.name not in processed_images]
                 else:
                     logger.error(f'processed_images 不是集合类型，当前类型: {type(processed_images)}')
                     sub_batch_files = []
                 remaining_count = len(sub_batch_files)
                 total_count = sub_end - sub_start
-                if remaining_count == 0:
-                    logger.info(f'子批次 {sub_batch_idx+1}/{total_sub_batches} 所有 {total_count} 张图像已处理，跳过')
-                else:
-                    logger.info(f'子批次 {sub_batch_idx+1}/{total_sub_batches} 发现 {total_count - remaining_count} 张已处理图像，将处理剩余 {remaining_count} 张')
                 if not sub_batch_files:
                     continue
-                
+
                 sub_batch_paths = [str(img_path) for img_path in sub_batch_files]
-
-                # 每5个路径批次才输出跳过信息
-                if batch_idx % 5 == 0:
-                    if remaining_count == 0:
-                        logger.info(f'路径批次 {batch_idx} 子批次 {sub_batch_idx+1}/{total_sub_batches} 所有图像已处理，跳过')
-                    else:
-                        logger.info(f'路径批次 {batch_idx} 子批次 {sub_batch_idx+1}/{total_sub_batches} 处理剩余 {remaining_count} 张图像')
-                if not sub_batch_files:
-                    continue
-
-                logger.info(f'处理推理子批次 {sub_batch_idx+1}/{total_sub_batches}，共 {len(sub_batch_paths)} 张图像')
 
                 # 预热模型（仅第一次推理前执行）
                 if not warmup_done and len(sub_batch_paths) > 0:
                     with torch.no_grad():
                         model.predict(source=sub_batch_paths[0], device=device, task='detect', batch=1, verbose=False)
-                    logger.info('模型预热完成')
+                    if is_resuming:
+                        logger.info('模型预热完成')
                     warmup_done = True
 
                 # 执行推理
@@ -262,7 +248,8 @@ def run_inference(weights_path: str, source_dir: str, output_csv_path: str):
                     sub_results = model.predict(source=sub_batch_paths, device=device, task='detect', batch=inference_batch_size, half=True)
 
                 # 推理后内存状态
-                log_memory_usage(f"子批次 {sub_batch_idx+1}")
+                if is_resuming:
+                    log_memory_usage(f"子批次 {sub_batch_idx+1}")
 
                 # 处理推理结果
                 for i, res in enumerate(sub_results):
@@ -315,10 +302,11 @@ def run_inference(weights_path: str, source_dir: str, output_csv_path: str):
                 gc.collect()  # 强制垃圾回收
 
                 # 清理后内存状态
-                log_memory_usage(f"子批次 {sub_batch_idx+1}", is_cleanup=True)
-
-                logger.info(f'子批次 {sub_batch_idx+1}/{total_sub_batches} 处理完成，内存已清理')
+                if is_resuming:
+                    log_memory_usage(f"子批次 {sub_batch_idx+1}", is_cleanup=True)
+                    logger.info(f'子批次 {sub_batch_idx+1}/{total_sub_batches} 处理完成，内存已清理')
                 processed_count += sub_batch_size  # 更新计数器变量
+            processed_batches += 1  # 增加批次计数器
             # 批次处理完成后保存当前结果
             results_df = pd.DataFrame(results_data)
             if not output_csv_path.exists():
@@ -326,10 +314,10 @@ def run_inference(weights_path: str, source_dir: str, output_csv_path: str):
             else:
                 results_df.to_csv(output_csv_path, index=False, mode='a', header=False)
             
-            logger.info(f'路径批次 {batch_idx} 中间结果已追加至 {output_csv_path.resolve()}')
-            # 每10个批次输出一次进度信息
-            processed_batches += 1
-            progress_bar.update(current_batch_size)
+            # 断点后才输出中间结果日志
+            if is_resuming:
+                logger.info(f'路径批次 {batch_idx} 中间结果已追加至 {output_csv_path.resolve()}')
+            # 保留进度更新日志
             logger.info(f"进度更新: 已完成 {processed_batches} 个路径批次，处理了 {processed_count} 张图片")
             # 删除旧的进度更新行
 
@@ -337,12 +325,14 @@ def run_inference(weights_path: str, source_dir: str, output_csv_path: str):
             batch_end_time = time.time()
             batch_duration = batch_end_time - batch_start_time
             
-            if batch_duration > 0:
-                images_per_minute = (current_batch_size / batch_duration) * 60
-                seconds_per_1k_images = (batch_duration / current_batch_size) * 1000
-                logger.info(f"批次 {batch_idx} 性能指标: 平均每分钟处理 {images_per_minute:.2f} 张图片, 平均每1000张图片耗时 {seconds_per_1k_images:.2f} 秒")
-            else:
-                logger.info(f"批次 {batch_idx} 处理完成，时间过短无法计算性能指标")
+            # 断点后才输出性能指标
+            if is_resuming:
+                if batch_duration > 0:
+                    images_per_minute = (current_batch_size / batch_duration) * 60
+                    seconds_per_1k_images = (batch_duration / current_batch_size) * 1000
+                    logger.info(f"批次 {batch_idx} 性能指标: 平均每分钟处理 {images_per_minute:.2f} 张图片, 平均每1000张图片耗时 {seconds_per_1k_images:.2f} 秒")
+                else:
+                    logger.info(f"批次 {batch_idx} 处理完成，时间过短无法计算性能指标")
 
             # 重置结果数据结构，只保留当前批次数据用于聚合
             results_data = {
