@@ -51,12 +51,13 @@ def save_progress(epoch, model, results, config):
     progress = {
         'epoch': epoch,
         'epochs_completed': epoch,
+
         'time': time.time(),
-        'good_epoch': results.good_epoch,
-        'good_map': float(results.good_map),
-        'last_epoch': results.epoch,
+        'good_epoch': results.epoch,
+        'good_map': float(results.metrics.get('map50', 0.0)),
+        'final_epoch': results.epoch,
         'timestamp': datetime.now().isoformat(),
-        'last_weights': str(PROGRESS_DIR / f'checkpoint_epoch{epoch}.pt'),
+        'final_weights': str(PROGRESS_DIR / f'checkpoint_epoch{epoch}.pt'),
         'good_weights': str(PROGRESS_DIR / f'good_epoch{epoch}.pt')
     }
 
@@ -149,6 +150,9 @@ def main():
         resume=args.resume
     )
 
+    # 保存训练进度
+    save_progress(config['epochs'], model, results, config)
+    
     # 保存训练后的模型
     final_model_path = Path(config['model_path']) / 'weights' / 'yolo_seg_alarm_train3_final.pt'
     model.save(str(final_model_path))
