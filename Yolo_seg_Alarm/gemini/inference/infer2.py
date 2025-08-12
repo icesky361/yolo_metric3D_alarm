@@ -221,19 +221,19 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                     img_path = sub_batch_files[i]
                     names = res.names
 
-                    # 生成标注图像
-                    original_image = Image.open(img_path).convert('RGB')
-                    original_array = np.array(original_image)
-                    annotated_image = res.plot(img=original_array)
-
-                    # 保存标注图像
-                    filename = img_path.stem
-                    extension = img_path.suffix
-                    new_filename = f"{filename}_tl{extension}"
-                    Image.fromarray(annotated_image).save(output_images_path / new_filename)
-
                     # 解析检测结果
                     if res.boxes is not None and len(res.boxes) > 0:
+                        # 生成标注图像
+                        original_image = Image.open(img_path).convert('RGB')
+                        original_array = np.array(original_image)
+                        annotated_image = res.plot(img=original_array)
+
+                        # 保存标注图像
+                        filename = img_path.stem
+                        extension = img_path.suffix
+                        new_filename = f"{filename}_tl{extension}"
+                        Image.fromarray(annotated_image).save(output_images_path / new_filename)
+
                         for box in res.boxes:
                             class_id = int(box.cls)
                             confidence = float(box.conf)
@@ -246,7 +246,7 @@ def run_inference(weights_path: str, source_dir: str, output_excel_path: str):
                             results_data['bbox_xyxy'].append(",".join(map(str, bbox_coords)))
                     else:
                         results_data['original_image_name'].append(img_path.name)
-                        results_data['annotated_image_name'].append(new_filename)
+                        results_data['annotated_image_name'].append('')
                         results_data['pred_class'].append('未检测到')
                         results_data['confidence'].append(0.0)
                         results_data['bbox_xyxy'].append('')
